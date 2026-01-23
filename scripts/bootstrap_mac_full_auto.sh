@@ -271,7 +271,7 @@ stow_apply_home() {
   done
 
   log "Applying stow: $DOTFILES_DIR/home -> ~"
-  (cd "$DOTFILES_DIR" && stow -v -t "$HOME" home)
+  (cd "$DOTFILES_DIR" && stow -v -t "$HOME" --restow home)
 
   log "stow done. backup: $backup_root"
 }
