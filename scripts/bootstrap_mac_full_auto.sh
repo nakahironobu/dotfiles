@@ -2,37 +2,40 @@
 set -euo pipefail
 
 ########################################
-# macOS Full Bootstrap (AUTO, dotfiles-based)
+# macOS Full Bootstrap (AUTO, dotfiles-based, STOW)
 #
 # Includes:
-# - Homebrew + packages (git fzf neovim ripgrep fd eza)
+# - Xcode CLT (prompts GUI install if missing; exits -> re-run)
+# - Homebrew + packages (git fzf neovim ripgrep fd eza stow python)
 # - WezTerm (cask + CLI path + font fallback + window layout injection + font_size)
 # - zsh (Antidote + p10k already in your dotfiles) + plugins + aliases
-#     - eza aliases with --classify:
-#         alias z1='eza --classify'
-#         alias zz='eza -lah --classify'
-#         alias z2='eza --tree --level=2 --classify'
+#     - eza aliases with --classify (managed block appended/updated in dotfiles .zshrc)
 #     - zsh-syntax-highlighting (ensure last in .zsh_plugins.txt)
-#     - iCloud cd aliases (icloud/desktop/ayumi/manami/sapix/seg/kono)
+#     - iCloud cd aliases (managed block appended)
+# - Dotfiles linking via GNU stow:
+#     stow -t ~ home   (home/ is your package directory)
 # - Neovim (headless Lazy sync + TSUpdateSync + checkhealth, pin treesitter to master)
 #
-# Manual steps:
-# - If Xcode CLT missing: prompts GUI install and exits -> re-run after install.
-# - If dotfiles missing and DOTFILES_REPO empty: prints instruction and exits -> re-run.
+# Typical "one-shot" on a new Mac:
+#   xcode-select --install 2>/dev/null || true
+#   git clone https://github.com/nakahironobu/dotfiles.git ~/dotfiles
+#   cd ~/dotfiles
+#   ./scripts/bootstrap_mac_full_auto.sh
+#
 ########################################
 
 DOTFILES_DIR="${DOTFILES_DIR:-$HOME/dotfiles}"
 DOTFILES_HOME_DIR="${DOTFILES_HOME_DIR:-$DOTFILES_DIR/home}"
-DOTFILES_REPO="${DOTFILES_REPO:-}"
+
+# Default to HTTPS for frictionless first-run on new Macs (SSH key not required)
+DOTFILES_REPO="${DOTFILES_REPO:-https://github.com/nakahironobu/dotfiles.git}"
+
 ANTIDOTE_DIR="${ANTIDOTE_DIR:-$HOME/.local/share/antidote}"
 
-BREW_FORMULAE=( git fzf neovim ripgrep fd eza )
+BREW_FORMULAE=( git fzf neovim ripgrep fd eza stow python )
 BREW_CASKS=( wezterm )
 
 MESLO_FONT_BASE_URL="https://github.com/romkatv/powerlevel10k-media/raw/master"
-
-FILES=( ".zshrc" ".zsh_plugins.txt" ".p10k.zsh" )
-DIR_LINKS=( ".config/wezterm" ".config/nvim" )
 
 # WezTerm layout knobs (override if desired)
 WEZTERM_FONT_SIZE="${WEZTERM_FONT_SIZE:-16.0}"
@@ -47,15 +50,6 @@ err()  { printf "\033[1;31m[ERR]\033[0m %s\n" "$*"; }
 
 need_cmd() { command -v "$1" >/dev/null 2>&1; }
 is_macos() { [[ "$(uname -s)" == "Darwin" ]]; }
-
-backup_if_exists() {
-  local path="$1"
-  if [[ -e "$path" || -L "$path" ]]; then
-    local bak="${path}.bak.$(timestamp)"
-    mv -f "$path" "$bak"
-    warn "Backed up: $path -> $bak"
-  fi
-}
 
 require_manual_then_exit() {
   local msg="$1"
@@ -145,26 +139,17 @@ clone_or_update_dotfiles() {
     exit 1
   fi
 
-  if [[ -z "$DOTFILES_REPO" ]]; then
-    require_manual_then_exit "dotfiles not found and DOTFILES_REPO empty.
-Set:
-  export DOTFILES_REPO=\"git@github.com:YOURNAME/dotfiles.git\"
-then re-run."
-  fi
-
   log "Cloning dotfiles into $DOTFILES_DIR ..."
   git clone "$DOTFILES_REPO" "$DOTFILES_DIR"
 }
 
 ensure_dotfiles_layout() {
-  if [[ ! -d "$DOTFILES_HOME_DIR" ]]; then err "Missing: $DOTFILES_HOME_DIR"; exit 1; fi
-  for f in "${FILES[@]}"; do
-    [[ -f "$DOTFILES_HOME_DIR/$f" ]] || { err "Missing: $DOTFILES_HOME_DIR/$f"; exit 1; }
-  done
-  for d in "${DIR_LINKS[@]}"; do
-    [[ -d "$DOTFILES_HOME_DIR/$d" ]] || { err "Missing dir: $DOTFILES_HOME_DIR/$d"; exit 1; }
-  done
-  log "dotfiles layout OK."
+  [[ -d "$DOTFILES_HOME_DIR" ]] || { err "Missing: $DOTFILES_HOME_DIR"; exit 1; }
+  [[ -f "$DOTFILES_HOME_DIR/.zshrc" ]] || { err "Missing: $DOTFILES_HOME_DIR/.zshrc"; exit 1; }
+  [[ -f "$DOTFILES_HOME_DIR/.zsh_plugins.txt" ]] || { err "Missing: $DOTFILES_HOME_DIR/.zsh_plugins.txt"; exit 1; }
+  [[ -f "$DOTFILES_HOME_DIR/.p10k.zsh" ]] || { err "Missing: $DOTFILES_HOME_DIR/.p10k.zsh"; exit 1; }
+  [[ -d "$DOTFILES_HOME_DIR/.config" ]] || { err "Missing dir: $DOTFILES_HOME_DIR/.config"; exit 1; }
+  log "dotfiles layout OK (stow)."
 }
 
 ensure_zshrc_path_local_bin() {
@@ -181,7 +166,6 @@ ensure_zshrc_eza_aliases() {
   local zshrc="$DOTFILES_HOME_DIR/.zshrc"
   local marker="# --- eza aliases (managed) ---"
 
-  # If marker exists, we replace the whole managed block to keep it correct.
   if grep -qF "$marker" "$zshrc"; then
     log "Updating eza alias block in dotfiles .zshrc (managed)"
     python3 - <<PY
@@ -195,8 +179,7 @@ alias z1='eza --classify'
 alias zz='eza -lah --classify'
 alias z2='eza --tree --level=2 --classify'
 '''.strip() + "\n"
-# Replace from marker line to the next blank line or EOF (best-effort)
-pat = re.compile(r"(?ms)^# --- eza aliases \\(managed\\) ---\\n.*?(?=\\n\\n|\\Z)")
+pat = re.compile(r"(?ms)^# --- eza aliases \(managed\) ---\n.*?(?=\n\n|\Z)")
 s2, n = pat.subn(block, s, count=1)
 if n == 0:
     s2 = s + "\n\n" + block
@@ -260,36 +243,37 @@ PY
   fi
 }
 
-link_files() {
-  for f in "${FILES[@]}"; do
-    local src="$DOTFILES_HOME_DIR/$f" dst="$HOME/$f"
-    if [[ -L "$dst" ]]; then
-      local current; current="$(readlink "$dst")"
-      [[ "$current" == "$src" ]] && { log "Symlink OK: $dst"; continue; }
-      backup_if_exists "$dst"
-    elif [[ -e "$dst" ]]; then
-      backup_if_exists "$dst"
-    fi
-    ln -sf "$src" "$dst"
-    log "Linked: $dst -> $src"
-  done
-}
+stow_apply_home() {
+  if ! need_cmd stow; then
+    err "stow not found (should have been installed by brew)."
+    exit 1
+  fi
 
-link_directories() {
-  mkdir -p "$HOME/.config"
-  for rel in "${DIR_LINKS[@]}"; do
-    local src="$DOTFILES_HOME_DIR/$rel" dst="$HOME/$rel"
-    mkdir -p "$(dirname "$dst")"
-    if [[ -L "$dst" ]]; then
-      local current; current="$(readlink "$dst")"
-      [[ "$current" == "$src" ]] && { log "Dir symlink OK: $dst"; continue; }
-      backup_if_exists "$dst"
-    elif [[ -e "$dst" ]]; then
-      backup_if_exists "$dst"
+  local ts; ts="$(timestamp)"
+  local backup_root="$HOME/.dotfiles-backup/$ts"
+  mkdir -p "$backup_root"
+
+  # Back up only “likely conflict” paths (real files/dirs only; symlinks are OK)
+  local candidates=(
+    "$HOME/.zshrc"
+    "$HOME/.zsh_plugins.txt"
+    "$HOME/.p10k.zsh"
+    "$HOME/.config/nvim"
+    "$HOME/.config/wezterm"
+  )
+
+  for p in "${candidates[@]}"; do
+    if [[ -e "$p" && ! -L "$p" ]]; then
+      mkdir -p "$backup_root/$(dirname "${p#$HOME/}")"
+      mv -f "$p" "$backup_root/$(dirname "${p#$HOME/}")/"
+      warn "Backed up: $p -> $backup_root/$(dirname "${p#$HOME/}")/"
     fi
-    ln -sfn "$src" "$dst"
-    log "Linked dir: $dst -> $src"
   done
+
+  log "Applying stow: $DOTFILES_DIR/home -> ~"
+  (cd "$DOTFILES_DIR" && stow -v -t "$HOME" home)
+
+  log "stow done. backup: $backup_root"
 }
 
 install_or_update_antidote() {
@@ -484,6 +468,7 @@ ensure_default_shell_zsh() {
 summary() {
   echo
   echo "================ Summary ================"
+  echo "Dotfiles linked via GNU stow: ~/dotfiles/home -> ~"
   echo "Installed: eza + zsh-syntax-highlighting"
   echo "eza aliases (with classify):"
   echo "  z1='eza --classify'"
@@ -507,13 +492,14 @@ main() {
   clone_or_update_dotfiles
   ensure_dotfiles_layout
 
+  # Keep your dotfiles content consistent (managed blocks)
   ensure_zshrc_path_local_bin
   ensure_zshrc_eza_aliases
   ensure_zshrc_icloud_cd_aliases
   ensure_syntax_highlighting_plugin_last
 
-  link_files
-  link_directories
+  # Apply dotfiles to ~ via stow (backs up conflicting real files first)
+  stow_apply_home
 
   install_or_update_antidote
   generate_antidote_bundle
