@@ -4,4 +4,3 @@ Aloxaf/fzf-tab
 zsh-users/zsh-autosuggestions
 zdharma-continuum/fast-syntax-highlighting
 zsh-users/zsh-syntax-highlighting
-

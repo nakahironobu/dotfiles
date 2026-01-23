@@ -8,6 +8,7 @@ set -euo pipefail
 # - Xcode CLT (prompts GUI install if missing; exits -> re-run)
 # - Homebrew + packages (git fzf neovim ripgrep fd eza stow python)
 # - WezTerm (cask + CLI path + font fallback + window layout injection + font_size)
+#     NOTE: If /Applications/WezTerm.app already exists, skip cask install and continue.
 # - zsh (Antidote + p10k already in your dotfiles) + plugins + aliases
 #     - eza aliases with --classify (managed block appended/updated in dotfiles .zshrc)
 #     - zsh-syntax-highlighting (ensure last in .zsh_plugins.txt)
@@ -108,11 +109,24 @@ install_brew_packages() {
   done
 
   for cask in "${BREW_CASKS[@]}"; do
+    # --- Special-case: WezTerm already exists in /Applications ---
+    # Homebrew cask can error out if the app bundle already exists.
+    # Requirement: skip wezterm install and continue with the rest.
+    if [[ "$cask" == "wezterm" && -d "/Applications/WezTerm.app" ]]; then
+      warn "WezTerm.app already exists at /Applications/WezTerm.app; skipping 'brew install --cask wezterm' and continuing."
+      continue
+    fi
+
     if brew list --cask "$cask" >/dev/null 2>&1; then
       log "brew cask already installed: $cask"
     else
       log "Installing brew cask: $cask"
-      brew install --cask "$cask"
+      # Use if/else so failure doesn't trigger set -e termination.
+      if brew install --cask "$cask"; then
+        log "brew cask installed: $cask"
+      else
+        warn "brew cask install failed: $cask (skipping and continuing)"
+      fi
     fi
   done
 

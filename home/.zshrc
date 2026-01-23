@@ -58,3 +58,18 @@ alias sapix='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Manami/M
 alias seg='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Ayumi/SEG'
 alias kono='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Ayumi/KonoJuku'
 
+
+# --- eza aliases (managed) ---
+alias z1='eza --classify'
+alias zz='eza -lah --classify'
+alias z2='eza --tree --level=2 --classify'
+
+
+# --- iCloud cd aliases (managed) ---
+alias icloud='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs'
+alias desktop='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop'
+alias ayumi='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Ayumi'
+alias manami='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Manami'
+alias sapix='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Manami/Manami-Sapix'
+alias seg='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Ayumi/SEG'
+alias kono='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Ayumi/KonoJuku'
