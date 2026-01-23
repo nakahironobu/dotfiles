@@ -1,0 +1,29 @@
+# macOS
+.DS_Store
+
+# shells / history
+.zsh_history
+.bash_history
+.lesshst
+
+# SSH keys (絶対に上げない)
+.ssh/
+!/.ssh/config
+!/.ssh/config.d/
+
+# secrets / env
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+
+# editor / tooling caches
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# misc caches
+.cache/

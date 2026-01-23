@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Zsh再構築手順メモ（Antidote + Powerlevel10k + dotfiles管理）</title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif; line-height: 1.6; padding: 24px; max-width: 980px; margin: 0 auto; }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    pre { background: #f6f8fa; padding: 12px; border-radius: 8px; overflow-x: auto; }
+    h1,h2,h3 { line-height: 1.25; }
+    .box { border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px 14px; background: #fff; }
+    .ok { color: #065f46; font-weight: 600; }
+    .warn { color: #92400e; font-weight: 600; }
+    ul { margin-top: 0.2rem; }
+    .small { font-size: 0.95rem; color: #374151; }
+  </style>
+</head>
+
+<body>
+  <h1>Zsh再構築手順メモ（Antidote + Powerlevel10k + dotfiles管理）</h1>
+
+  <div class="box">
+    <p><strong>目的</strong>：<code>素の .zshrc</code> で、<strong>高速</strong>・<strong>入力補助</strong>強化（補完/サジェスト/ハイライト）・<strong>外観</strong>は Powerlevel10k、設定は <strong>dotfilesで一元管理</strong>。</p>
+    <p class="small"><strong>前提</strong>：macOS / ユーザー <code>/Users/hironobu</code> / dotfilesは <code>~/dotfiles/home/</code> を使用。</p>
+  </div>
+
+  <h2>1. 土台（フレームワーク/マネージャ）の選定</h2>
+  <ul>
+    <li><strong>採用</strong>：<span class="ok">Antidote</span>（プラグインマネージャ）</li>
+    <li><strong>理由</strong>：最低限の記述で、キャッシュにバンドルを生成して高速化しやすい。dotfilesに設定を置き、生成物はキャッシュに逃がせる。</li>
+    <li><strong>外観</strong>：<span class="ok">Powerlevel10k (p10k)</span></li>
+  </ul>
+
+  <h2>2. 実際に行った操作（時系列まとめ）</h2>
+
+  <h3>2.1 クリーンアップ（混乱防止のため、いったん0に戻した）</h3>
+  <p>今回の構成に関係するものだけを削除（他の設定は巻き込まない方針）。</p>
+  <pre><code>rm -f ~/.zshrc ~/.zsh_plugins.txt ~/.p10k.zsh
+rm -rf ~/.local/share/antidote
+rm -rf ~/.cache/zsh
+rm -f  ~/.zcompdump*</code></pre>
+  <p class="small">確認（存在しない場合もOK）。</p>
+  <pre><code>ls -la ~/.zshrc ~/.zsh_plugins.txt ~/.p10k.zsh 2&gt;/dev/null || echo "OK: home側のzsh/p10kファイルは無し"
+ls -la ~/.local/share/antidote 2&gt;/dev/null || echo "OK: antidote無し"
+ls -la ~/.cache/zsh 2&gt;/dev/null || echo "OK: zshキャッシュ無し"
+ls -la ~/.zcompdump*(N) 2&gt;/dev/null || echo "OK: zcompdump無し"</code></pre>
+
+  <h3>2.2 dotfiles側に設定ファイルを作成</h3>
+  <p><code>~/dotfiles/home/</code> に以下を作成。</p>
+
+  <h4>(A) プラグイン一覧：<code>~/dotfiles/home/.zsh_plugins.txt</code></h4>
+  <pre><code>cat &gt; ~/dotfiles/home/.zsh_plugins.txt &lt;&lt;'EOF'
+romkatv/powerlevel10k
+zsh-users/zsh-completions
+Aloxaf/fzf-tab
+zsh-users/zsh-autosuggestions
+zdharma-continuum/fast-syntax-highlighting
+EOF</code></pre>
+
+  <h4>(B) メイン：<code>~/dotfiles/home/.zshrc</code></h4>
+  <pre><code>cat &gt; ~/dotfiles/home/.zshrc &lt;&lt;'EOF'
+# ---- p10k instant prompt (fast startup) ----
+if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
+  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
+fi
+
+export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
+export XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+
+# ---- Antidote ----
+source "$XDG_DATA_HOME/antidote/antidote.zsh"
+
+ZSH_PLUGINS_TXT="$HOME/.zsh_plugins.txt"
+ZSH_BUNDLE_ZSH="$XDG_CACHE_HOME/zsh/antidote_bundle.zsh"
+mkdir -p "${ZSH_BUNDLE_ZSH:h}"
+
+if [[ ! -f "$ZSH_BUNDLE_ZSH" || "$ZSH_PLUGINS_TXT" -nt "$ZSH_BUNDLE_ZSH" ]]; then
+  antidote bundle &lt; "$ZSH_PLUGINS_TXT" &gt;| "$ZSH_BUNDLE_ZSH"
+fi
+source "$ZSH_BUNDLE_ZSH"
+
+# ---- Powerlevel10k config ----
+[[ -f "$HOME/.p10k.zsh" ]] &amp;&amp; source "$HOME/.p10k.zsh"
+
+# ---- Completion ----
+autoload -Uz compinit
+compinit -C
+
+zstyle ':completion:*' menu select
+zstyle ':completion:*' matcher-list 'm:{a-z}={A-Za-z}'
+EOF</code></pre>
+
+  <h4>(C) p10k設定：<code>~/dotfiles/home/.p10k.zsh</code></h4>
+  <p>最初は空（のちに <code>p10k configure</code> が上書きする）。</p>
+  <pre><code>: &gt; ~/dotfiles/home/.p10k.zsh</code></pre>
+
+  <h3>2.3 ホームへ反映（symlink）</h3>
+  <pre><code>ln -sf ~/dotfiles/home/.zshrc ~/.zshrc
+ln -sf ~/dotfiles/home/.zsh_plugins.txt ~/.zsh_plugins.txt
+ln -sf ~/dotfiles/home/.p10k.zsh ~/.p10k.zsh</code></pre>
+
+  <p class="small">確認（symlinkになっていること）。</p>
+  <pre><code>ls -la ~/.zshrc ~/.zsh_plugins.txt ~/.p10k.zsh</code></pre>
+
+  <h3>2.4 Antidote本体を導入</h3>
+  <pre><code>mkdir -p ~/.local/share
+git clone https://github.com/mattmc3/antidote.git ~/.local/share/antidote</code></pre>
+  <p class="small">確認。</p>
+  <pre><code>ls -la ~/.local/share/antidote/antidote.zsh</code></pre>
+
+  <h3>2.5 .zshrcを読み込み → bundle生成</h3>
+  <pre><code>source ~/.zshrc</code></pre>
+  <p class="small">生成確認（成功した実績：<code>~/.cache/zsh/antidote_bundle.zsh</code> が作成される）。</p>
+  <pre><code>ls -la ~/.cache/zsh/antidote_bundle.zsh</code></pre>
+
+  <h3>2.6 p10k設定を生成（ウィザード）</h3>
+  <p><span class="ok">ポイント</span>：<code>~/.p10k.zsh</code> が dotfiles への symlink なので、ウィザードの出力は <code>~/dotfiles/home/.p10k.zsh</code> に反映される。</p>
+  <pre><code>p10k configure</code></pre>
+  <p class="small">生成確認（成功した実績：<code>~/dotfiles/home/.p10k.zsh</code> が 1745 行に増えた）。</p>
+  <pre><code>wc -l ~/dotfiles/home/.p10k.zsh</code></pre>
+
+  <h2>3. いまの最終状態（ファイル配置）</h2>
+  <div class="box">
+    <ul>
+      <li><code>~/.zshrc</code> → <code>~/dotfiles/home/.zshrc</code>（symlink）</li>
+      <li><code>~/.zsh_plugins.txt</code> → <code>~/dotfiles/home/.zsh_plugins.txt</code>（symlink）</li>
+      <li><code>~/.p10k.zsh</code> → <code>~/dotfiles/home/.p10k.zsh</code>（symlink）</li>
+      <li>Antidote本体：<code>~/.local/share/antidote/</code></li>
+      <li>生成物（キャッシュ）：<code>~/.cache/zsh/antidote_bundle.zsh</code></li>
+    </ul>
+  </div>
+
+  <h2>4. 万が一の時に「元に戻す」手続き</h2>
+
+  <h3>4.1 “今回の構成だけ”を全部消してクリーンに戻す</h3>
+  <p class="warn">注意：この手順は、今回の Antidote + p10k 用のファイルを消します。</p>
+  <pre><code>rm -f ~/.zshrc ~/.zsh_plugins.txt ~/.p10k.zsh
+rm -rf ~/.local/share/antidote
+rm -rf ~/.cache/zsh
+rm -f  ~/.zcompdump*</code></pre>
+
+  <h3>4.2 dotfiles側も消して完全に0に戻す（任意）</h3>
+  <pre><code>rm -f ~/dotfiles/home/.zshrc ~/dotfiles/home/.zsh_plugins.txt ~/dotfiles/home/.p10k.zsh</code></pre>
+
+  <h3>4.3 “元の設定に戻す”（バックアップがある場合）</h3>
+  <p>もし以前の <code>.zshrc</code> などを別名で残しているなら、戻すのは単純です。</p>
+  <pre><code># 例: 以前の設定が ~/.zshrc.bak にある場合
+mv -f ~/.zshrc.bak ~/.zshrc
+exec zsh</code></pre>
+  <p class="small">バックアップが無い場合は、クリーン状態のままでも zsh は起動します（デフォルト挙動）。</p>
+
+  <h2>5. zsh上で「何ができるか」まとめ（この構成での実用操作）</h2>
+
+  <h3>5.1 補完（compinit）</h3>
+  <ul>
+    <li><strong>Tab</strong>：補完候補の表示/確定</li>
+    <li><strong>候補が複数</strong>：カーソルキーで選べる（<code>menu select</code> を有効化済み）</li>
+    <li><strong>大文字小文字</strong>：曖昧マッチ（<code>matcher-list</code>）を有効化済み</li>
+  </ul>
+
+  <h3>5.2 fzf-tab（候補選択が強化される）</h3>
+  <ul>
+    <li>Tab補完の候補選択が見やすく・絞り込みしやすくなる（候補が多いときほど効く）</li>
+    <li>※ fzf本体を入れておくと体験が安定しやすい（必要なら <code>brew install fzf</code>）</li>
+  </ul>
+
+  <h3>5.3 autosuggestions（履歴から先読み提案）</h3>
+  <ul>
+    <li>入力中に薄い文字で「次に打ちそう」が出る</li>
+    <li>一般的な操作：<strong>→（右矢印）</strong>や<strong>End</strong>などで提案を採用（端末/キーバインド設定により差あり）</li>
+  </ul>
+
+  <h3>5.4 fast-syntax-highlighting（入力の色付け）</h3>
+  <ul>
+    <li>コマンドが存在しない/構文が怪しい、などが色でわかる</li>
+    <li>入力ミスに早く気づける（安全運転）</li>
+  </ul>
+
+  <h3>5.5 Powerlevel10k（プロンプト操作）</h3>
+  <ul>
+    <li><code>p10k configure</code>：見た目の再設定（いつでもやり直し可）</li>
+    <li><code>p10k reload</code>：設定の再読み込み（タブを開き直さず反映）</li>
+  </ul>
+
+  <h3>5.6 “設定を反映/再起動する”系の基本操作</h3>
+  <ul>
+    <li><code>source ~/.zshrc</code>：今のタブで設定を読み直す（最頻出）</li>
+    <li><code>exec zsh</code>：今のプロセスをzshで置き換えて再起動（タブを閉じずに“新しい起動”に近い）</li>
+    <li>新しいタブ/ウィンドウを開く：一番確実で安全</li>
+  </ul>
+
+  <h3>5.7 変更点の管理（dotfiles運用）</h3>
+  <ul>
+    <li><code>~/dotfiles/home/.zsh_plugins.txt</code> を編集→ <code>source ~/.zshrc</code> で bundle が自動再生成（.zshrc内の条件分岐）</li>
+    <li>生成物は <code>~/.cache/zsh/</code> に置く設計なので、dotfilesを汚しにくい</li>
+  </ul>
+
+  <hr />
+  <p class="small">このHTMLは「作業ログ + 復旧手順 + 使い方」セットです。必要なら、あなたの実際の <code>~/dotfiles/home/.zshrc</code> の内容に合わせて（追加した設定も含めて）最新版に整形し直します。</p>
+</body>
+</html>
+

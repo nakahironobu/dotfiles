@@ -1,0 +1,7 @@
+romkatv/powerlevel10k
+zsh-users/zsh-completions
+Aloxaf/fzf-tab
+zsh-users/zsh-autosuggestions
+zdharma-continuum/fast-syntax-highlighting
+zsh-users/zsh-syntax-highlighting
+
