@@ -45,7 +45,7 @@ MESLO_FONT_BASE_URL="https://github.com/romkatv/powerlevel10k-media/raw/master"
 # WezTerm layout knobs (override if desired)
 WEZTERM_FONT_SIZE="${WEZTERM_FONT_SIZE:-16.0}"
 WEZTERM_Y_OFFSET_RATIO="${WEZTERM_Y_OFFSET_RATIO:-0.08}"  # slightly above center
-WEZTERM_WIDTH_RATIO="${WEZTERM_WIDTH_RATIO:-0.6666667}"   # 2/3
+WEZTERM_WIDTH_RATIO="${WEZTERM_WIDTH_RATIO:-0.4}"   # 2/5
 WEZTERM_HEIGHT_RATIO="${WEZTERM_HEIGHT_RATIO:-0.5}"       # 1/2
 
 timestamp() { date +"%Y%m%d_%H%M%S"; }

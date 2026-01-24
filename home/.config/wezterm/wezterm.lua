@@ -12,7 +12,7 @@ wezterm.on("gui-startup", function(cmd)
   local w = s.width
   local h = s.height
 
-  local inner_w = math.floor(w * 0.6666667)
+  local inner_w = math.floor(w * 0.4)
   local inner_h = math.floor(h * 0.5)
 
   local x = math.floor(w - inner_w)
