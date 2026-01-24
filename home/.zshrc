@@ -73,3 +73,8 @@ alias manami='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Manami'
 alias sapix='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Manami/Manami-Sapix'
 alias seg='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Ayumi/SEG'
 alias kono='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Ayumi/KonoJuku'
+
+# --- direnv hook (managed) ---
+if command -v direnv >/dev/null 2>&1; then
+  eval "$(direnv hook zsh)"
+fi
