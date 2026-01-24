@@ -5,25 +5,28 @@ set -euo pipefail
 # Python Base Bootstrap (macOS, dotfiles-based)
 #
 # Goals:
-# - Keep macOS "system python3" untouched (Plan A2)
 # - Install Python dev toolchain:
 #     - uv (core)
 #     - direnv (optional but recommended)
 #     - ruff / pre-commit / ipython via "uv tool"
+# - Set uv-managed "default python3" to 3.14 (Plan: base default = 3.14)
+#     - This will make `python3` resolve to ~/.local/bin/python3 (if PATH prefers it)
 # - Ensure direnv hook exists in dotfiles .zshrc (managed block)
 # - Restow dotfiles home package
 #
-# After this:
-# - Use per-project: scripts/bootstrap_python_project.sh
-# - Run code via: uv run ...
+# NOTE:
+# - This script uses /usr/bin/python3 for internal file patching to avoid
+#   dependency on uv-managed python while bootstrapping.
 ########################################
 
 DOTFILES_DIR="${DOTFILES_DIR:-$HOME/dotfiles}"
 DOTFILES_HOME_DIR="${DOTFILES_HOME_DIR:-$DOTFILES_DIR/home}"
 
+# Base python version managed by uv (default python3)
+UV_BASE_PYVER="${UV_BASE_PYVER:-3.14}"
+
 BREW_FORMULAE=( uv direnv )
 
-timestamp() { date +"%Y%m%d_%H%M%S"; }
 log()  { printf "\033[1;32m[OK]\033[0m %s\n" "$*"; }
 warn() { printf "\033[1;33m[WARN]\033[0m %s\n" "$*"; }
 err()  { printf "\033[1;31m[ERR]\033[0m %s\n" "$*"; }
@@ -71,10 +74,9 @@ install_brew_packages() {
 
 ensure_zshrc_direnv_hook() {
   local zshrc="$DOTFILES_HOME_DIR/.zshrc"
-  local marker="# --- direnv hook (managed) ---"
-
   log "Ensuring direnv hook block in dotfiles .zshrc"
-  python3 - <<PY
+
+  /usr/bin/python3 - <<PY
 from pathlib import Path
 import re
 
@@ -109,39 +111,57 @@ restow_home() {
   log "stow done."
 }
 
-install_uv_tools() {
+set_uv_default_python() {
   if ! need_cmd uv; then err "uv not found"; exit 1; fi
 
+  log "Installing uv-managed Python ${UV_BASE_PYVER} and setting as default (python3)"
+  # This will place python/python3 shims in ~/.local/bin (PATH should already prefer it)
+  if ! uv python install "${UV_BASE_PYVER}" --default; then
+    err "Failed to install/set default Python ${UV_BASE_PYVER} via uv."
+    warn "Try updating uv:  brew upgrade uv"
+    echo
+    echo "uv python list:"
+    uv python list || true
+    exit 1
+  fi
+  log "uv default python set to ${UV_BASE_PYVER}"
+}
+
+install_uv_tools() {
+  if ! need_cmd uv; then err "uv not found"; exit 1; fi
   log "Installing dev tools via uv tool (idempotent)"
   uv tool install ruff || true
   uv tool install pre-commit || true
   uv tool install ipython || true
 }
 
-verify_system_python() {
-  log "Verifying macOS system python3 (should be /usr/bin/python3 stub -> CLT)"
-  local p
-  p="$(command -v python3 || true)"
-  echo "python3: $p"
-  python3 -c "import sys; print('sys.executable:', sys.executable)"
+verify() {
+  echo
+  echo "---- Verify ----"
+  echo "which python3: $(command -v python3 || true)"
+  python3 --version || true
+  echo "uv: $(command -v uv || true)"
+  uv --version || true
+  echo "ruff: $(command -v ruff || true)"
+  ruff --version || true
+  echo "--------------"
 }
 
 summary() {
   echo
   echo "================ Summary ================"
   echo "Installed (brew): ${BREW_FORMULAE[*]}"
+  echo "uv default python3: ${UV_BASE_PYVER} (via uv python install --default)"
   echo "Installed (uv tool): ruff / pre-commit / ipython"
   echo "Updated dotfiles .zshrc: direnv hook block (managed)"
   echo "========================================"
   echo
   echo "Next:"
   echo "  exec zsh"
-  echo "  uv --version"
-  echo "  ruff --version"
-  echo
+  echo "  which python3 && python3 --version"
   echo "Project setup:"
-  echo "  ~/dotfiles/scripts/bootstrap_python_project.sh 3.12"
-  echo "  (then run via: uv run ...)"
+  echo "  ~/dotfiles/scripts/bootstrap_python_project.sh        # default 3.14"
+  echo "  ~/dotfiles/scripts/bootstrap_python_project.sh 3.14   # explicit"
 }
 
 main() {
@@ -153,8 +173,10 @@ main() {
   ensure_zshrc_direnv_hook
   restow_home
 
+  set_uv_default_python
   install_uv_tools
-  verify_system_python
+
+  verify
   summary
 }
 

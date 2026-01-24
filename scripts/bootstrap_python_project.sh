@@ -4,17 +4,21 @@ set -euo pipefail
 ########################################
 # Python Project Bootstrap (uv-based)
 #
+# Default: Python 3.14 (per your plan)
+#
 # Creates:
 # - .venv (uv venv)
+# - .python-version (uv python pin) to lock project interpreter
 # - pyproject.toml (if missing; minimal)
 # - uv sync (uses/creates lock as needed)
 # - .envrc for direnv (optional)
 #
 # Usage:
-#   ~/dotfiles/scripts/bootstrap_python_project.sh 3.12
+#   ~/dotfiles/scripts/bootstrap_python_project.sh        # => 3.14
+#   ~/dotfiles/scripts/bootstrap_python_project.sh 3.14
 ########################################
 
-PYVER="${1:-3.12}"
+PYVER="${1:-3.14}"
 
 log()  { printf "\033[1;32m[OK]\033[0m %s\n" "$*"; }
 warn() { printf "\033[1;33m[WARN]\033[0m %s\n" "$*"; }
@@ -43,11 +47,15 @@ TOML
   log "Created pyproject.toml"
 }
 
-create_venv() {
-  log "Ensuring Python ${PYVER} is available (uv will handle)"
+pin_python() {
+  log "Pinning project Python to ${PYVER} (creates/updates .python-version)"
   uv python install "${PYVER}" >/dev/null 2>&1 || true
+  uv python pin "${PYVER}"
+}
 
-  log "Creating .venv (uv venv --python ${PYVER})"
+create_venv() {
+  log "Recreating .venv with Python ${PYVER}"
+  rm -rf .venv
   uv venv --python "${PYVER}"
   log ".venv ready."
 }
@@ -87,26 +95,35 @@ maybe_install_precommit() {
   fi
 }
 
+verify() {
+  echo
+  echo "---- Verify (project) ----"
+  uv run python --version
+  uv run python -c "import sys; print(sys.executable)"
+  echo "--------------------------"
+}
+
 summary() {
   echo
   echo "================ Summary ================"
   echo "Project: $(basename "$PWD")"
-  echo "Python target: ${PYVER}"
-  echo "Venv: .venv"
+  echo "Python pinned: ${PYVER}  (see .python-version)"
+  echo "Venv: .venv (recreated)"
   echo "Next:"
   echo "  uv run python -V"
   echo "  uv run ruff check ."
-  echo "  uv run python -c \"import sys; print(sys.executable)\""
   echo "========================================"
 }
 
 main() {
   require_tools
   ensure_pyproject
+  pin_python
   create_venv
   sync_deps
   setup_direnv
   maybe_install_precommit
+  verify
   summary
 }
 
