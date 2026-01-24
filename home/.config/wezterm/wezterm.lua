@@ -23,36 +23,7 @@ wezterm.on("gui-startup", function(cmd)
   gui:set_inner_size(inner_w, inner_h)
 end)
 -- END OAI MANAGED: WEZTERM LAYOUT
-wezterm.on("gui-startup", function(cmd)
-	local tab, pane, window = wezterm.mux.spawn_window(cmd or {})
-	local gui = window:gui_window()
-
-	local screens = wezterm.gui.screens()
-	local s = screens.active or screens[1]
-
-	local w = s.width
-	local h = s.height
-
-	-- サイズ：幅 2/5、高さ 1/2
-	local inner_w = math.floor(w * 2 / 5)
-	local inner_h = math.floor(h * 1 / 2)
-
-	-- 位置：右寄せ,右端は少し空間,縦は中央より少し上
-	local RIGHT_MARGIN = 24
-	local x = math.floor(w - inner_w - RIGHT_MARGIN)
-
-	-- 「少し上」をオフセットで表現（画面高の 8% 上げる）
-	local y = math.floor((h - inner_h) / 2 - (h * 0.08))
-	if x < 0 then
-		x = 0
-	end
-	if y < 0 then
-		y = 0
-	end
-
-	gui:set_position(x, y)
-	gui:set_inner_size(inner_w, inner_h)
-end)
+local FONT_SIZE = 16.0
 
 return {
 	font = wezterm.font_with_fallback({

@@ -386,21 +386,29 @@ wezterm.on("gui-startup", function(cmd)
   gui:set_inner_size(inner_w, inner_h)
 end)
 -- END OAI MANAGED: WEZTERM LAYOUT
-""".strip() + "\n"
+""".strip() + "\\n"
 
-if "local wezterm = require(\"wezterm\")" not in s and "local wezterm = require('wezterm')" not in s:
+# Ensure wezterm is required at the top
+if 'local wezterm = require("wezterm")' not in s and "local wezterm = require('wezterm')" not in s:
     s = 'local wezterm = require("wezterm")\\n\\n' + s
 
-block_re = re.compile(r"-- BEGIN OAI MANAGED: WEZTERM LAYOUT.*?-- END OAI MANAGED: WEZTERM LAYOUT\\n?", re.S)
-if block_re.search(s):
-    s = block_re.sub(managed, s)
-else:
-    m = re.search(r"local wezterm\\s*=\\s*require\\([\"']wezterm[\"']\\)\\s*\\n+", s)
-    if m:
-        s = s[:m.end()] + managed + s[m.end():]
-    else:
-        s = managed + s
+# 1) Remove any existing managed block (we will re-insert exactly one)
+block_re = re.compile(r"""-- BEGIN OAI MANAGED: WEZTERM LAYOUT.*?-- END OAI MANAGED: WEZTERM LAYOUT\\s*\\n?""", re.S)
+s = block_re.sub("", s)
 
+# 2) Remove ANY gui-startup handler (prevents multiple windows spawning)
+#    Use triple-quoted raw regex to avoid quote escaping issues entirely.
+startup_re = re.compile(r'''wezterm\.on\(\s*['"]gui-startup['"]\s*,\s*function\(cmd\).*?\nend\)\s*\n?''', re.S)
+s = startup_re.sub("", s)
+
+# 3) Insert managed block right after local wezterm = require("wezterm")
+m = re.search(r"""local wezterm\s*=\s*require\(["']wezterm["']\)\s*\n+""", s)
+if m:
+    s = s[:m.end()] + managed + s[m.end():]
+else:
+    s = managed + s
+
+# Font fallback patch
 fallback_block = f'''font = wezterm.font_with_fallback({{
     "{primary}",
     "MesloLGS Nerd Font Mono",
@@ -409,46 +417,29 @@ fallback_block = f'''font = wezterm.font_with_fallback({{
     "Menlo",
   }}),'''
 
-if re.search(r"font\\s*=\\s*wezterm\\.font_with_fallback\\(", s):
-    s = re.sub(r"font\\s*=\\s*wezterm\\.font_with_fallback\\(\\{.*?\\}\\)\\s*,", fallback_block, s, flags=re.S)
+if re.search(r"font\s*=\s*wezterm\.font_with_fallback\(", s):
+    s = re.sub(
+        r"font\s*=\s*wezterm\.font_with_fallback\(\{.*?\}\)\s*,",
+        fallback_block,
+        s,
+        flags=re.S
+    )
 else:
-    s = re.sub(r'font\\s*=\\s*wezterm\\.font\\([^\\)]*\\)\\s*,', fallback_block, s)
+    s = re.sub(r"font\s*=\s*wezterm\.font\([^\)]*\)\s*,", fallback_block, s)
 
-if re.search(r"font_size\\s*=", s):
-    s = re.sub(r"font_size\\s*=\\s*[^,\\n]+\\s*,", "font_size = FONT_SIZE,", s)
+# Ensure font_size = FONT_SIZE
+if re.search(r"font_size\s*=", s):
+    s = re.sub(r"font_size\s*=\s*[^,\n]+\s*,", "font_size = FONT_SIZE,", s)
 else:
-    s = re.sub(r"(font\\s*=\\s*wezterm\\.font_with_fallback\\(\\{.*?\\}\\)\\s*,)",
-               r"\\1\\n  font_size = FONT_SIZE,", s, flags=re.S)
+    s = re.sub(
+        r"(font\s*=\s*wezterm\.font_with_fallback\(\{.*?\}\)\s*,)",
+        r"\\1\\n  font_size = FONT_SIZE,",
+        s,
+        flags=re.S
+    )
 
 p.write_text(s, encoding="utf-8")
-print("OK: wezterm.lua patched (managed layout + font)")
-PY
-}
-
-pin_treesitter_master_if_needed() {
-  local init="$DOTFILES_HOME_DIR/.config/nvim/init.lua"
-  [[ -f "$init" ]] || { warn "nvim init.lua not found"; return; }
-  if grep -q "nvim-treesitter/nvim-treesitter" "$init" && grep -q "branch *= *['\"]master['\"]" "$init"; then
-    log "nvim-treesitter already pinned to master."
-    return
-  fi
-  log "Pinning nvim-treesitter to master..."
-  python3 - <<'PY'
-from pathlib import Path
-import re
-p = Path.home()/"dotfiles/home/.config/nvim/init.lua"
-s = p.read_text(encoding="utf-8")
-if "nvim-treesitter/nvim-treesitter" not in s:
-    print("SKIP: treesitter spec not found"); raise SystemExit(0)
-if re.search(r"branch\s*=\s*['\"]master['\"]", s):
-    print("OK: already pinned"); raise SystemExit(0)
-pat = r"(['\"])nvim-treesitter/nvim-treesitter\1\s*,"
-m = re.search(pat, s)
-if not m:
-    print("ERR: pattern not found"); raise SystemExit(1)
-s2 = re.sub(pat, m.group(0) + "\n      branch = 'master',", s, count=1)
-p.write_text(s2, encoding="utf-8")
-print("OK: pinned nvim-treesitter to master")
+print("OK: wezterm.lua patched (managed layout + font; gui-startup deduped)")
 PY
 }
 

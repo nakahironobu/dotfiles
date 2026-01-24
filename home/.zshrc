@@ -65,6 +65,10 @@ alias zz='eza -lah --classify'
 alias z2='eza --tree --level=2 --classify'
 
 
+
+
+
+
 # --- iCloud cd aliases (managed) ---
 alias icloud='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs'
 alias desktop='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop'
