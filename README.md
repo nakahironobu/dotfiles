@@ -9,7 +9,7 @@
 
 > NOTE: macOS 付属の `python3`（`/usr/bin/python3` → Command Line Tools 側）を“初期状態”として保持し、プロジェクト実行は `uv run ...` を標準にします。
 
-> 既定の方針: `bootstrap_python_base.sh` は **uv の default python3 を 3.14** に設定します。（`UV_BASE_PYVER` 環境変数で上書き可能。例えばこのMacだけテストで `3.13` にしたい場合は `UV_BASE_PYVER=3.13` で実行）
+> 既定の方針: `bootstrap_python_base.sh` は **uv の default python3 を 3.14** に設定します。
 
 ---
 
@@ -29,8 +29,6 @@ cd ~/dotfiles
 # 2) Python開発ベース（uv/direnv/ruff/pre-commit 等）
 ./scripts/bootstrap_python_base.sh
 
-# （このMacだけテストで base を 3.13 にしたい場合）
-# UV_BASE_PYVER=3.13 ./scripts/bootstrap_python_base.sh
 ```
 
 #### Xcode CLT のダイアログが出た場合
@@ -53,7 +51,6 @@ cd ~/dotfiles
 ### 1) Python開発ベース（全プロジェクト共通）
 
 - `bootstrap_python_base.sh` は **uv の default python3 を 3.14** に設定します。
-- このMacだけテストで 3.13 のままにしたい場合は、実行時に `UV_BASE_PYVER=3.13` を付けます。
 
 `./scripts/bootstrap_python_base.sh` が行うこと（要約）:
 
@@ -231,7 +228,6 @@ uv python list
 ```
 
 - `which python3` が `~/.local/bin/python3` なら uv default が優先されています。
-- `UV_BASE_PYVER` を変えた場合は `exec zsh`（または新しいタブ）で再読み込みしてください。
 
 ## リポジトリ構成
 
