@@ -6,9 +6,8 @@ set -euo pipefail
 #
 # Includes:
 # - Xcode CLT (prompts GUI install if missing; exits -> re-run)
-# - Homebrew + packages (git fzf neovim ripgrep fd eza stow python)
+# - Homebrew + packages (git fzf neovim ripgrep fd eza stow)
 # - WezTerm (cask + CLI path + font fallback + window layout injection + font_size)
-#     NOTE: If /Applications/WezTerm.app already exists, skip cask install and continue.
 # - zsh (Antidote + p10k already in your dotfiles) + plugins + aliases
 #     - eza aliases with --classify (managed block appended/updated in dotfiles .zshrc)
 #     - zsh-syntax-highlighting (ensure last in .zsh_plugins.txt)
@@ -16,6 +15,10 @@ set -euo pipefail
 # - Dotfiles linking via GNU stow:
 #     stow -t ~ home   (home/ is your package directory)
 # - Neovim (headless Lazy sync + TSUpdateSync + checkhealth, pin treesitter to master)
+#
+# NOTE:
+# - Python is intentionally NOT installed here (Plan A2).
+#   Use scripts/bootstrap_python_base.sh for Python dev toolchain.
 #
 # Typical "one-shot" on a new Mac:
 #   xcode-select --install 2>/dev/null || true
@@ -33,7 +36,8 @@ DOTFILES_REPO="${DOTFILES_REPO:-https://github.com/nakahironobu/dotfiles.git}"
 
 ANTIDOTE_DIR="${ANTIDOTE_DIR:-$HOME/.local/share/antidote}"
 
-BREW_FORMULAE=( git fzf neovim ripgrep fd eza stow python )
+# Plan A2: DO NOT install python here
+BREW_FORMULAE=( git fzf neovim ripgrep fd eza stow )
 BREW_CASKS=( wezterm )
 
 MESLO_FONT_BASE_URL="https://github.com/romkatv/powerlevel10k-media/raw/master"
@@ -109,24 +113,11 @@ install_brew_packages() {
   done
 
   for cask in "${BREW_CASKS[@]}"; do
-    # --- Special-case: WezTerm already exists in /Applications ---
-    # Homebrew cask can error out if the app bundle already exists.
-    # Requirement: skip wezterm install and continue with the rest.
-    if [[ "$cask" == "wezterm" && -d "/Applications/WezTerm.app" ]]; then
-      warn "WezTerm.app already exists at /Applications/WezTerm.app; skipping 'brew install --cask wezterm' and continuing."
-      continue
-    fi
-
     if brew list --cask "$cask" >/dev/null 2>&1; then
       log "brew cask already installed: $cask"
     else
       log "Installing brew cask: $cask"
-      # Use if/else so failure doesn't trigger set -e termination.
-      if brew install --cask "$cask"; then
-        log "brew cask installed: $cask"
-      else
-        warn "brew cask install failed: $cask (skipping and continuing)"
-      fi
+      brew install --cask "$cask"
     fi
   done
 
@@ -495,6 +486,10 @@ summary() {
   echo
   echo "If fonts were newly installed, restart WezTerm once."
   echo "Open a NEW terminal tab (or run: exec zsh) to load updated zsh config."
+  echo
+  echo "Python:"
+  echo "  This script does NOT install Python (Plan A2)."
+  echo "  Run: ./scripts/bootstrap_python_base.sh"
 }
 
 main() {
