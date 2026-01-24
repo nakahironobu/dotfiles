@@ -2,14 +2,12 @@
 
 このリポジトリは、macOS を「新しいMacでも一撃で同じ環境」にするための dotfiles です。
 
-やっていること（要約）:
+## 方針（重要）
+- **Mac の土台セットアップ**は `bootstrap_mac_full_auto.sh` で実施します（Homebrew / zsh / WezTerm / Neovim / stow 等）。
+- **Python開発のベース環境**は **別スクリプト** `bootstrap_python_base.sh` に一本化します。
+- **プロジェクトごとのPython実行環境**は `bootstrap_python_project.sh` で作成します（`.venv` / `uv sync` 等）。
 
-- Xcode Command Line Tools の導入（未導入ならGUIインストールを促して一旦終了→再実行）
-- Homebrew 導入 + パッケージ（git/fzf/neovim/rg/fd/eza/stow/python 等）
-- zsh（Antidote + powerlevel10k）とプラグイン設定の整備
-- WezTerm（フォント導入、CLI symlink、レイアウト注入、font fallback）
-- Neovim（headless で Lazy sync / TSUpdateSync / checkhealth）
-- dotfiles 反映は **GNU stow** で実施（`~/dotfiles/home -> ~`）
+> NOTE: macOS 付属の `python3`（`/usr/bin/python3` → Command Line Tools 側）を“初期状態”として保持し、プロジェクト実行は `uv run ...` を標準にします。
 
 ---
 
@@ -22,7 +20,12 @@ xcode-select --install 2>/dev/null || true
 
 git clone https://github.com/nakahironobu/dotfiles.git ~/dotfiles
 cd ~/dotfiles
+
+# 1) Mac土台
 ./scripts/bootstrap_mac_full_auto.sh
+
+# 2) Python開発ベース（uv/direnv/ruff/pre-commit 等）
+./scripts/bootstrap_python_base.sh
 ```
 
 #### Xcode CLT のダイアログが出た場合
@@ -31,6 +34,7 @@ cd ~/dotfiles
 ```sh
 cd ~/dotfiles
 ./scripts/bootstrap_mac_full_auto.sh
+./scripts/bootstrap_python_base.sh
 ```
 
 #### 完了後の推奨アクション
@@ -39,13 +43,56 @@ cd ~/dotfiles
 
 ---
 
+## Python（ベース / プロジェクト）
+
+### 1) Python開発ベース（全プロジェクト共通）
+`./scripts/bootstrap_python_base.sh` が行うこと（要約）:
+
+- Homebrew で `uv` / `direnv` を導入
+- `uv tool` で `ruff` / `pre-commit` / `ipython` を導入（pipを汚さない）
+- dotfiles 側の `.zshrc` に `direnv` hook（managed block）を反映し、`stow --restow home` で適用
+
+確認:
+
+```sh
+uv --version
+ruff --version
+```
+
+> NOTE: macOS付属の `python3` は置き換えません。プロジェクト実行は `uv run ...` を推奨します。
+
+### 2) プロジェクトごとの環境作成
+リポジトリ（プロジェクト）直下で実行:
+
+```sh
+~/dotfiles/scripts/bootstrap_python_project.sh 3.12
+```
+
+このスクリプトが行うこと（要約）:
+- `.venv` を作成（`uv venv`）
+- `pyproject.toml` が無ければ最小のものを生成
+- `uv sync`（依存と lock の入口）
+- `direnv` があれば `.envrc` を生成し `direnv allow`
+
+動作確認:
+
+```sh
+uv run python -V
+uv run python -c "import sys; print(sys.executable)"
+uv run ruff check .
+```
+
+---
+
 ## 何が行われるか（詳細）
 
-### 1) Homebrew
-Homebrew をインストールし、以下などを導入します（スクリプト内 `BREW_FORMULAE / BREW_CASKS` 参照）:
+### 1) Homebrew（macOS土台）
+`bootstrap_mac_full_auto.sh` は Homebrew をインストールし、以下などを導入します（スクリプト内 `BREW_FORMULAE / BREW_CASKS` 参照）:
 
-- formula: `git`, `fzf`, `neovim`, `ripgrep`, `fd`, `eza`, `stow`, `python`
+- formula: `git`, `fzf`, `neovim`, `ripgrep`, `fd`, `eza`, `stow`
 - cask: `wezterm`
+
+> NOTE: **Python はここでは導入しません**（Pythonは `bootstrap_python_base.sh` に一本化）。
 
 ### 2) dotfiles 反映（GNU stow）
 `home/` を stow の package として、ホームディレクトリに symlink を張ります:
@@ -81,6 +128,7 @@ stow 適用前に、衝突しやすい既存ファイル/ディレクトリが *
 - `eza` alias（managed block）
 - iCloud の cd alias（managed block）
 - `.zsh_plugins.txt` の末尾に `zsh-syntax-highlighting` を配置する
+- `direnv` hook（managed block） ※ `bootstrap_python_base.sh` が反映
 
 ### 5) WezTerm
 - MesloLGS NF フォントを `~/Library/Fonts` に導入（無ければ）
@@ -105,12 +153,18 @@ stow 適用前に、衝突しやすい既存ファイル/ディレクトリが *
 ```sh
 cd ~/dotfiles
 git pull --ff-only
+
+# Mac土台
 ./scripts/bootstrap_mac_full_auto.sh
+
+# Python開発ベース（必要に応じて）
+./scripts/bootstrap_python_base.sh
 ```
 
 - Homebrew の追加導入やアップデートがあれば適用されます
 - stow によりリンクが維持/更新されます
 - Neovim の headless 同期が走り、プラグイン等が追随します
+- Python 開発ツール（uv/ruff等）は python_base 側で追随します
 
 ---
 
@@ -131,9 +185,34 @@ cd ~/dotfiles
 stow -n -v -t ~ home
 ```
 
+### python3 が Homebrew 側を向いてしまう
+方針としては macOS 付属の `python3` を維持し、プロジェクトは `uv run ...` を使います。  
+もし `which -a python3` の先頭に `/opt/homebrew/bin/python3` が出る場合は、Homebrew の Python が入っている可能性があります。
+
+確認:
+
+```sh
+which -a python3
+python3 -c "import sys; print(sys.executable)"
+```
+
+必要なら（Homebrew python を使わない方針の場合）:
+
+```sh
+brew list --formula | egrep '^python($|@)' || true
+brew unlink python 2>/dev/null || true
+brew unlink python@3.12 2>/dev/null || true
+brew unlink python@3.13 2>/dev/null || true
+brew unlink python@3.14 2>/dev/null || true
+hash -r
+exec zsh
+```
+
 ---
 
 ## リポジトリ構成
 
 - `home/` : stow の package（ここが `~` にリンクされる）
-- `scripts/bootstrap_mac_full_auto.sh` : 一撃セットアップ本体
+- `scripts/bootstrap_mac_full_auto.sh` : macOS土台の一撃セットアップ本体（Pythonは入れない）
+- `scripts/bootstrap_python_base.sh` : Python開発ベース（uv/direnv/ruff/pre-commit 等）
+- `scripts/bootstrap_python_project.sh` : プロジェクト用Python環境作成（`.venv` / `uv sync`）
