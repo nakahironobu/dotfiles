@@ -180,9 +180,14 @@ p = Path(r"$zshrc")
 s = p.read_text(encoding="utf-8")
 block = r'''
 # --- eza aliases (managed) ---
-alias z1='eza --classify'
-alias zz='eza -lah --classify'
-alias z2='eza --tree --level=2 --classify'
+alias z='eza --classify'
+alias zz='eza --tree --level=2 --classify'
+alias zzz='eza --tree --level=3 --classify'
+alias zzzz='eza --tree --level=4 --classify'
+alias za='eza -lah --classify'
+alias zl='eza -lh --classify'
+alias ls='eza --classify'
+alias ll='eza -lh --classify'
 '''.strip() + "\n"
 pat = re.compile(r"(?ms)^# --- eza aliases \(managed\) ---\n.*?(?=\n\n|\Z)")
 s2, n = pat.subn(block, s, count=1)
@@ -198,9 +203,14 @@ PY
   cat >> "$zshrc" <<'EOF'
 
 # --- eza aliases (managed) ---
-alias z1='eza --classify'
-alias zz='eza -lah --classify'
-alias z2='eza --tree --level=2 --classify'
+alias z='eza --classify'
+alias zz='eza --tree --level=2 --classify'
+alias zzz='eza --tree --level=3 --classify'
+alias zzzz='eza --tree --level=4 --classify'
+alias za='eza -lah --classify'
+alias zl='eza -lh --classify'
+alias ls='eza --classify'
+alias ll='eza -lh --classify'
 EOF
 }
 
@@ -276,6 +286,8 @@ stow_apply_home() {
   done
 
   log "Applying stow: $DOTFILES_DIR/home -> ~"
+  # Pre-create deeply nested directories to ensure stow symlinks only files
+  mkdir -p "$HOME/Library/Application Support/Antigravity/User"
   (cd "$DOTFILES_DIR" && stow -v -t "$HOME" --restow home)
 
   log "stow done. backup: $backup_root"
@@ -440,6 +452,27 @@ else:
 
 p.write_text(s, encoding="utf-8")
 print("OK: wezterm.lua patched (managed layout + font; gui-startup deduped)")
+PY
+}
+
+pin_treesitter_master_if_needed() {
+  local init_lua="$DOTFILES_HOME_DIR/.config/nvim/init.lua"
+  [[ -f "$init_lua" ]] || return 0
+
+  if grep -q "branch = 'master'" "$init_lua" || grep -q 'branch = "master"' "$init_lua"; then
+    log "Treesitter already pinned to master in init.lua"
+    return 0
+  fi
+
+  warn "Patching init.lua to pin nvim-treesitter to master..."
+  python3 - <<PY
+from pathlib import Path
+import re
+p = Path(r"$init_lua")
+s = p.read_text(encoding="utf-8")
+pat = re.compile(r"(['\"]nvim-treesitter/nvim-treesitter['\"])\s*,")
+s2 = pat.sub(r"\1,\n    branch = 'master',", s)
+p.write_text(s2, encoding="utf-8")
 PY
 }
 

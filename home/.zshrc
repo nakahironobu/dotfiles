@@ -43,32 +43,18 @@ zstyle ':completion:*' use-cache on
 zstyle ':completion:*' cache-path "$XDG_CACHE_HOME/zsh/zcompcache"
 
 
-# ---- eza のエイリアス設定----
-alias zz='eza -lah --classify'
-alias z1='eza --classify'
-alias z2='eza --tree --level=2 --classify'
-alias z3='eza --tree --level=3 --classify'
-
-alias icloud='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs'
-alias desktop='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop'
+# ---- eza のエイリアス設定 (managed block でカバーされるため最小限に) ----
 alias projects='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Projects'
-alias ayumi='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Ayumi'
-alias manami='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Manami'
-alias sapix='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Manami/Manami-Sapix'
-alias seg='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Ayumi/SEG'
-alias kono='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Ayumi/KonoJuku'
-
 
 # --- eza aliases (managed) ---
-alias z1='eza --classify'
-alias zz='eza -lah --classify'
-alias z2='eza --tree --level=2 --classify'
-
-
-
-
-
-
+alias z='eza --classify'
+alias zz='eza --tree --level=2 --classify'
+alias zzz='eza --tree --level=3 --classify'
+alias zzzz='eza --tree --level=4 --classify'
+alias za='eza -lah --classify'
+alias zl='eza -lh --classify'
+alias ls='eza --classify'
+alias ll='eza -lh --classify'
 
 
 # --- iCloud cd aliases (managed) ---
