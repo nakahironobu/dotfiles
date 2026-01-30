@@ -60,6 +60,7 @@ alias ll='eza -lh --classify'
 # --- iCloud cd aliases (managed) ---
 alias icloud='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs'
 alias desktop='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop'
+alias projects='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Projecs'
 alias ayumi='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Ayumi'
 alias manami='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Manami'
 alias sapix='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Manami/Manami-Sapix'
