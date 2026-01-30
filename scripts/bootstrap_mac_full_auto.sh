@@ -180,14 +180,14 @@ p = Path(r"$zshrc")
 s = p.read_text(encoding="utf-8")
 block = r'''
 # --- eza aliases (managed) ---
-alias z='eza --classify'
+alias ls='eza --classify'
+alias ll='eza -lh --classify'
+alias la='eza -lah --classify'
+alias zl='eza -lh --classify'
+alias za='eza -lah --classify'
 alias zz='eza --tree --level=2 --classify'
 alias zzz='eza --tree --level=3 --classify'
 alias zzzz='eza --tree --level=4 --classify'
-alias za='eza -lah --classify'
-alias zl='eza -lh --classify'
-alias ls='eza --classify'
-alias ll='eza -lh --classify'
 '''.strip() + "\n"
 pat = re.compile(r"(?ms)^# --- eza aliases \(managed\) ---\n.*?(?=\n\n|\Z)")
 s2, n = pat.subn(block, s, count=1)
@@ -203,30 +203,56 @@ PY
   cat >> "$zshrc" <<'EOF'
 
 # --- eza aliases (managed) ---
-alias z='eza --classify'
+alias ls='eza --classify'
+alias ll='eza -lh --classify'
+alias la='eza -lah --classify'
+alias zl='eza -lh --classify'
+alias za='eza -lah --classify'
 alias zz='eza --tree --level=2 --classify'
 alias zzz='eza --tree --level=3 --classify'
 alias zzzz='eza --tree --level=4 --classify'
-alias za='eza -lah --classify'
-alias zl='eza -lh --classify'
-alias ls='eza --classify'
-alias ll='eza -lh --classify'
 EOF
 }
 
 ensure_zshrc_icloud_cd_aliases() {
   local zshrc="$DOTFILES_HOME_DIR/.zshrc"
   local marker="# --- iCloud cd aliases (managed) ---"
+  
   if grep -qF "$marker" "$zshrc"; then
-    log "iCloud cd alias block already present in dotfiles .zshrc"
+    log "Updating iCloud cd alias block in dotfiles .zshrc (managed)"
+    python3 - <<PY
+from pathlib import Path
+import re
+p = Path(r"$zshrc")
+s = p.read_text(encoding="utf-8")
+block = r'''
+# --- iCloud cd aliases (managed) ---
+alias icloud='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs'
+alias desktop='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop'
+alias projects='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Projects'
+alias ayumi='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Ayumi'
+alias manami='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Manami'
+alias sapix='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Manami/Manami-Sapix'
+alias seg='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Ayumi/SEG'
+alias kono='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Ayumi/KonoJuku'
+'''.strip() + "\n"
+pat = re.compile(r"(?ms)^# --- iCloud cd aliases \(managed\) ---\n.*?(?=\n\n|\Z)")
+s2, n = pat.subn(block, s, count=1)
+if n == 0:
+    s2 = s + "\n\n" + block
+p.write_text(s2, encoding="utf-8")
+print("OK: iCloud alias block updated")
+PY
     return
   fi
+
   log "Adding iCloud cd aliases to dotfiles .zshrc"
   cat >> "$zshrc" <<'EOF'
 
 # --- iCloud cd aliases (managed) ---
 alias icloud='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs'
 alias desktop='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop'
+alias projects='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Projects'
 alias ayumi='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Ayumi'
 alias manami='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Manami'
 alias sapix='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Manami/Manami-Sapix'
@@ -499,10 +525,7 @@ summary() {
   echo "================ Summary ================"
   echo "Dotfiles linked via GNU stow: ~/dotfiles/home -> ~"
   echo "Installed: eza + zsh-syntax-highlighting"
-  echo "eza aliases (with classify):"
-  echo "  z1='eza --classify'"
-  echo "  zz='eza -lah --classify'"
-  echo "  z2='eza --tree --level=2 --classify'"
+  echo "eza aliases (ls/ll/la/za/zl, zz/zzz...)"
   echo "iCloud cd aliases: icloud / desktop / ayumi / manami / sapix / seg / kono"
   echo "WezTerm layout injected: right aligned, w=2/3, h=1/2, y slightly above center"
   echo "font_size = ${WEZTERM_FONT_SIZE}"
