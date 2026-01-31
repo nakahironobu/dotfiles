@@ -548,7 +548,10 @@ managed = {
     "terminal.integrated.fontFamily": constant_font_family,
     "editor.fontSize": size,
     "terminal.integrated.fontSize": size,
-    "window.zoomLevel": zoom
+    "window.zoomLevel": zoom,
+    "vim.useCtrlKeys": True,
+    "vim.useSystemClipboard": True,
+    "vim.hlsearch": True
 }
 
 current = {}
