@@ -35,7 +35,7 @@ return {
   }),
 	font_size = FONT_SIZE,
 
-	color_scheme = "Builtin Solarized Dark",
+	color_scheme = "Catppuccin Mocha",
 	enable_tab_bar = true,
 	use_fancy_tab_bar = false,
 

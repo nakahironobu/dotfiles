@@ -549,6 +549,7 @@ managed = {
     "editor.fontSize": size,
     "terminal.integrated.fontSize": size,
     "window.zoomLevel": zoom,
+    "workbench.colorTheme": "Catppuccin Mocha",
     "vim.useCtrlKeys": True,
     "vim.useSystemClipboard": True,
     "vim.hlsearch": True
@@ -587,13 +588,13 @@ summary() {
   echo "Installed: eza + zsh-syntax-highlighting"
   echo "eza aliases (ls/ll/la/za/zl, zz/zzz...)"
   echo "iCloud cd aliases: icloud / desktop / ayumi / manami / sapix / seg / kono"
-  echo "WezTerm layout injected: right aligned, w=2/3, h=1/2, y slightly above center"
+  echo "Unified Theme: Catppuccin Mocha (WezTerm / Neovim / Antigravity)"
+  echo "WezTerm layout injected: right aligned, w=2/5, h=1/2, y slightly above center"
   echo "font_size = ${WEZTERM_FONT_SIZE}"
   echo "========================================"
   echo
   echo "If fonts were newly installed, restart WezTerm once."
   echo "Open a NEW terminal tab (or run: exec zsh) to load updated zsh config."
-  echo
   echo "Python:"
   echo "  This script does NOT install Python (Plan A2)."
   echo "  Run: ./scripts/bootstrap_python_base.sh"
