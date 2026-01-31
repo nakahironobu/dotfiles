@@ -508,8 +508,65 @@ nvim_headless_sync() {
   nvim --headless "+Lazy! sync" +qa || require_manual_then_exit "Neovim Lazy sync failed. Run: nvim -V1 -v"
   log "Neovim headless: TSUpdateSync..."
   nvim --headless "+silent! TSUpdateSync" +qa || true
-  log "Neovim headless: checkhealth..."
   nvim --headless "+silent! checkhealth" +qa || true
+}
+
+ensure_antigravity_settings() {
+  local ag_settings="$HOME/Library/Application Support/Antigravity/User/settings.json"
+  if [[ ! -d "$(dirname "$ag_settings")" ]]; then
+     # App might not be installed or run yet, but we can set up the dir
+     mkdir -p "$(dirname "$ag_settings")"
+  fi
+  
+  log "Updating Antigravity settings.json (managed font/zoom)..."
+  python3 - <<PY
+import json
+import platform
+import os
+
+target = "$ag_settings"
+hostname = platform.node()
+
+# Per-host sizing configuration
+# Format: "Hostname": (FontSize, ZoomLevel)
+host_configs = {
+    "HironobunoMac-mini.local": (14, 0.5),
+    # Examples for other machines:
+    # "MacBookPro.local": (12, 0),
+}
+
+# Defaults
+default_size = 14
+default_zoom = 0.5
+constant_font_family = "MesloLGS NF"
+
+# Resolve settings
+size, zoom = host_configs.get(hostname, (default_size, default_zoom))
+
+# Desired settings (managed)
+managed = {
+    "terminal.integrated.fontFamily": constant_font_family,
+    "editor.fontSize": size,
+    "terminal.integrated.fontSize": size,
+    "window.zoomLevel": zoom
+}
+
+current = {}
+if os.path.exists(target):
+    try:
+        with open(target, "r", encoding="utf-8") as f:
+            current = json.load(f)
+    except Exception:
+        pass
+
+# Merge/Override
+current.update(managed)
+
+with open(target, "w", encoding="utf-8") as f:
+    json.dump(current, f, indent=4)
+
+print(f"OK: Antigravity settings updated (Host: {hostname}, Size: {size}, Zoom: {zoom})")
+PY
 }
 
 ensure_default_shell_zsh() {
@@ -566,6 +623,8 @@ main() {
 
   pin_treesitter_master_if_needed
   nvim_headless_sync
+
+  ensure_antigravity_settings
 
   ensure_default_shell_zsh
   summary
