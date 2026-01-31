@@ -47,25 +47,28 @@ zstyle ':completion:*' cache-path "$XDG_CACHE_HOME/zsh/zcompcache"
 alias projects='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Projects'
 
 # --- eza aliases (managed) ---
-alias z='eza --classify'
+alias ls='eza --classify'
+alias ll='eza -lh --classify'
+alias la='eza -lah --classify'
+alias zl='eza -lh --classify'
+alias za='eza -lah --classify'
 alias zz='eza --tree --level=2 --classify'
 alias zzz='eza --tree --level=3 --classify'
 alias zzzz='eza --tree --level=4 --classify'
-alias za='eza -lah --classify'
-alias zl='eza -lh --classify'
-alias ls='eza --classify'
-alias ll='eza -lh --classify'
+
+
 
 
 # --- iCloud cd aliases (managed) ---
 alias icloud='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs'
 alias desktop='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop'
-alias projects='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Projecs'
+alias projects='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Projects'
 alias ayumi='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Ayumi'
 alias manami='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Manami'
 alias sapix='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Manami/Manami-Sapix'
 alias seg='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Ayumi/SEG'
 alias kono='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Ayumi/KonoJuku'
+
 
 # --- direnv hook (managed) ---
 if command -v direnv >/dev/null 2>&1; then
