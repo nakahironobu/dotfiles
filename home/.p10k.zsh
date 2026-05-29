@@ -119,7 +119,13 @@
   )
 
   # Defines character set used by powerlevel10k. It's best to let `p10k configure` set it for you.
-  typeset -g POWERLEVEL9K_MODE=nerdfont-v3
+  # Claudeデスクトップアプリの内蔵ターミナルはNerd Font非対応で豆腐(□)になるためASCIIにする。
+  # WezTerm等の通常ターミナルではNerd Fontアイコンを維持する。
+  if [[ "$__CFBundleIdentifier" == "com.anthropic.claudefordesktop" || "$CLAUDE_CODE_ENTRYPOINT" == "claude-desktop" ]]; then
+    typeset -g POWERLEVEL9K_MODE=ascii
+  else
+    typeset -g POWERLEVEL9K_MODE=nerdfont-v3
+  fi
   # When set to `moderate`, some icons will have an extra space after them. This is meant to avoid
   # icon overlap when using non-monospace fonts. When set to `none`, spaces are not added.
   typeset -g POWERLEVEL9K_ICON_PADDING=none
@@ -1732,6 +1738,46 @@
   # can slow down prompt by 1-2 milliseconds, so it's better to keep it turned off unless you
   # really need it.
   typeset -g POWERLEVEL9K_DISABLE_HOT_RELOAD=true
+
+  # ─── Claudeデスクトップ内蔵ターミナル専用の配色（濃色・高コントラスト） ───
+  # 既定の薄グレー(背景240)は見にくいため、Claude内蔵ターミナルの時だけ帯を濃色に上書きする。
+  # WezTerm等ではこのブロックに入らず、従来の配色を維持する。
+  if [[ "$__CFBundleIdentifier" == "com.anthropic.claudefordesktop" || "$CLAUDE_CODE_ENTRYPOINT" == "claude-desktop" ]]; then
+    # 右端の枠飾り(─╮ ─┤ ─╯)はこの端末のフォントで化けるため消す
+    typeset -g POWERLEVEL9K_MULTILINE_FIRST_PROMPT_SUFFIX=
+    typeset -g POWERLEVEL9K_MULTILINE_NEWLINE_PROMPT_SUFFIX=
+    typeset -g POWERLEVEL9K_MULTILINE_LAST_PROMPT_SUFFIX=
+
+    # 配色: 左はブルー系で統一(os_icon→dir→git をグラデーション)、右は中立グレー
+    typeset -g POWERLEVEL9K_BACKGROUND=236
+    typeset -g POWERLEVEL9K_OS_ICON_BACKGROUND=24      # 深い青
+    typeset -g POWERLEVEL9K_OS_ICON_FOREGROUND=255
+    typeset -g POWERLEVEL9K_DIR_BACKGROUND=32          # 明るい青（os_iconから自然に繋がる）
+    typeset -g POWERLEVEL9K_DIR_FOREGROUND=255
+    typeset -g POWERLEVEL9K_DIR_SHORTENED_FOREGROUND=152
+    typeset -g POWERLEVEL9K_DIR_ANCHOR_FOREGROUND=195
+    typeset -g POWERLEVEL9K_DIR_ANCHOR_BOLD=true
+    typeset -g POWERLEVEL9K_VCS_CLEAN_BACKGROUND=29    # 青緑（青から自然に繋がる）
+    typeset -g POWERLEVEL9K_VCS_CLEAN_FOREGROUND=255
+    typeset -g POWERLEVEL9K_VCS_UNTRACKED_BACKGROUND=29
+    typeset -g POWERLEVEL9K_VCS_UNTRACKED_FOREGROUND=255
+    typeset -g POWERLEVEL9K_VCS_MODIFIED_BACKGROUND=136 # 変更ありは琥珀色で目立たせる
+    typeset -g POWERLEVEL9K_VCS_MODIFIED_FOREGROUND=255
+    typeset -g POWERLEVEL9K_STATUS_ERROR_BACKGROUND=160
+    typeset -g POWERLEVEL9K_STATUS_ERROR_FOREGROUND=255
+    typeset -g POWERLEVEL9K_STATUS_OK_BACKGROUND=236
+    typeset -g POWERLEVEL9K_STATUS_OK_FOREGROUND=70
+    typeset -g POWERLEVEL9K_COMMAND_EXECUTION_TIME_BACKGROUND=238
+    typeset -g POWERLEVEL9K_COMMAND_EXECUTION_TIME_FOREGROUND=250
+    typeset -g POWERLEVEL9K_CONTEXT_BACKGROUND=238
+    typeset -g POWERLEVEL9K_CONTEXT_FOREGROUND=250
+    typeset -g POWERLEVEL9K_VIRTUALENV_BACKGROUND=238
+    typeset -g POWERLEVEL9K_VIRTUALENV_FOREGROUND=80   # シアン（青テーマに調和）
+    # 右端の時刻帯: 左のos_iconと同じ深い青にして左右で“ブックエンド”に
+    typeset -g POWERLEVEL9K_TIME_BACKGROUND=24
+    typeset -g POWERLEVEL9K_TIME_FOREGROUND=255
+    typeset -g POWERLEVEL9K_TIME_PREFIX='%195Fat '
+  fi
 
   # If p10k is already loaded, reload configuration.
   # This works even with POWERLEVEL9K_DISABLE_HOT_RELOAD=true.
