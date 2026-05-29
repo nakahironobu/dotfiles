@@ -44,8 +44,7 @@ zstyle ':completion:*' cache-path "$XDG_CACHE_HOME/zsh/zcompcache"
 
 
 # ---- eza のエイリアス設定 (managed block でカバーされるため最小限に) ----
-alias projects='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Projects'
-
+alias projects='cd /Users/hironobu/Library/CloudStorage/GoogleDrive-hironobu@nakafamily.com/その他のパソコン/マイ\ iMac/Desktop/Projects/'
 # --- eza aliases (managed) ---
 alias ls='eza --classify'
 alias ll='eza -lh --classify'
@@ -58,19 +57,10 @@ alias zzzz='eza --tree --level=4 --classify'
 
 
 
-
-# --- iCloud cd aliases (managed) ---
-alias icloud='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs'
-alias desktop='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop'
-alias projects='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Projects'
-alias ayumi='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Ayumi'
-alias manami='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Manami'
-alias sapix='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Manami/Manami-Sapix'
-alias seg='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Ayumi/SEG'
-alias kono='cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Desktop/Ayumi/KonoJuku'
-
-
 # --- direnv hook (managed) ---
 if command -v direnv >/dev/null 2>&1; then
   eval "$(direnv hook zsh)"
 fi
+
+# Added by Antigravity IDE
+export PATH="/Users/hironobu/.antigravity-ide/antigravity-ide/bin:$PATH"
