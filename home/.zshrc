@@ -45,6 +45,8 @@ zstyle ':completion:*' cache-path "$XDG_CACHE_HOME/zsh/zcompcache"
 
 # ---- eza のエイリアス設定 (managed block でカバーされるため最小限に) ----
 alias projects='cd /Users/hironobu/Library/CloudStorage/GoogleDrive-hironobu@nakafamily.com/その他のパソコン/マイ\ iMac/Desktop/Projects/'
+alias ayumi='/Users/hironobu/Library/CloudStorage/GoogleDrive-hironobu@nakafamily.com/その他のパソコン/マイ\ iMac/Desktop/Ayumi'
+alias manami='/Users/hironobu/Library/CloudStorage/GoogleDrive-hironobu@nakafamily.com/その他のパソコン/マイ\ iMac/Desktop/Manami'
 # --- eza aliases (managed) ---
 alias ls='eza --classify'
 alias ll='eza -lh --classify'
