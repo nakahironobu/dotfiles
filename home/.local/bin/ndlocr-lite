@@ -1,0 +1,27 @@
+#!/bin/bash
+# NDL-OCR Lite ラッパー（プロジェクト横断・共通）
+# 実体: ~/tools/ndlocr-lite （専用 uv venv 同梱、NDL公式ONNX軽量OCR）
+# 使い方: ndlocr-lite <画像ファイル|画像ディレクトリ> <出力ディレクトリ>
+#   出力dir に <stem>.txt（認識テキスト）/ .json / .xml を生成（CPU・GPU不要）
+set -e
+TOOL="$HOME/tools/ndlocr-lite"
+PY="$TOOL/.venv/bin/python"
+
+if [ $# -lt 2 ]; then
+  echo "Usage: ndlocr-lite <image-or-dir> <output-dir>" >&2
+  exit 1
+fi
+
+# 入出力を絶対パス化（src へ cd しても壊れないように）
+src_in="$1"
+out_in="$2"
+src="$(cd "$(dirname "$src_in")" && pwd)/$(basename "$src_in")"
+mkdir -p "$out_in"
+out="$(cd "$out_in" && pwd)"
+
+cd "$TOOL/src"
+if [ -d "$src" ]; then
+  exec "$PY" ocr.py --sourcedir "$src" --output "$out"
+else
+  exec "$PY" ocr.py --sourceimg "$src" --output "$out"
+fi
