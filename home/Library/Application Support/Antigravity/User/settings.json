@@ -1,7 +1,0 @@
-{
-    "terminal.integrated.fontFamily": "MesloLGS NF",
-    "editor.fontFamily": "'MesloLGS NF', Menlo, Monaco, 'Courier New', monospace",
-    "editor.fontSize": 16,
-    "terminal.integrated.fontSize": 16,
-    "python.languageServer": "Default"
-}
