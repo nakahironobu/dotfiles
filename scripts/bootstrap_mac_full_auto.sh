@@ -8,6 +8,11 @@ set -euo pipefail
 # - Xcode CLT (prompts GUI install if missing; exits -> re-run)
 # - Homebrew + packages (git fzf neovim ripgrep fd eza stow)
 # - WezTerm (cask + CLI path + font fallback + window layout injection + font_size)
+# - Google 日本語入力 (cask google-japanese-ime)
+#     NOTE: cask installs the app only. After install, add it once in
+#     System Settings > Keyboard > Text Input > Input Sources (+) >
+#     Japanese > "ひらがな (Google)", then remove "日本語 - ローマ字入力".
+#     (HIToolbox input-source enablement is fragile to script and needs a logout.)
 # - zsh (Antidote + p10k already in your dotfiles) + plugins + aliases
 #     - eza aliases with --classify (managed block appended/updated in dotfiles .zshrc)
 #     - zsh-syntax-highlighting (ensure last in .zsh_plugins.txt)
@@ -38,7 +43,7 @@ ANTIDOTE_DIR="${ANTIDOTE_DIR:-$HOME/.local/share/antidote}"
 
 # Plan A2: DO NOT install python here
 BREW_FORMULAE=( git fzf neovim ripgrep fd eza stow )
-BREW_CASKS=( wezterm )
+BREW_CASKS=( wezterm google-japanese-ime )
 
 MESLO_FONT_BASE_URL="https://github.com/romkatv/powerlevel10k-media/raw/master"
 
