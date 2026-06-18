@@ -5,7 +5,16 @@
 #   出力dir に <stem>.txt（認識テキスト）/ .json / .xml を生成（CPU・GPU不要）
 set -e
 TOOL="$HOME/tools/ndlocr-lite"
-PY="$TOOL/.venv/bin/python"
+
+# OCR は ~/Projects 共通 env に同居（uv workspace・Python3.14）。
+# 共有 env に onnxruntime が揃っていればそれを使い、無ければツール専用 venv に
+# フォールバック（dotfiles 共有先の未移行マシン対策）。
+SHARED="$HOME/Projects/.venv"
+if [ -x "$SHARED/bin/python" ] && ls "$SHARED"/lib/python*/site-packages/onnxruntime >/dev/null 2>&1; then
+  PY="$SHARED/bin/python"
+else
+  PY="$TOOL/.venv/bin/python"
+fi
 
 if [ $# -lt 2 ]; then
   echo "Usage: ndlocr-lite <image-or-dir> <output-dir>" >&2

@@ -1,0 +1,49 @@
+[project]
+name = "projects-workspace"
+version = "0.0.0"
+description = "~/Projects 共通環境（PDF→DB→webアプリ型）。単一 .venv / Python 3.14 / uv workspace。"
+requires-python = ">=3.14"
+dependencies = [
+    # --- 共通 web / DB / PDF 土台（全プロジェクトが使う層）---
+    "flask>=3",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.8",
+    "jinja2>=3",
+    "pymupdf>=1.24",
+    "pdf2image>=1.17",
+    "pypdf>=4.0",
+    "openpyxl>=3.1",
+    "pandas>=2.2",
+    "opencv-python>=4.10",       # ndlocr の opencv-python-headless と二重にしない（cv2 衝突回避）
+    # --- OCR セット（~/tools/ndlocr-lite を共有 venv で動かすための依存）---
+    # ndlocr-lite の requirements は厳密ピンで 3.14 非対応のため、ここでは 3.14 で解決する下限に緩めて共有する。
+    "onnxruntime>=1.27",
+    "flet>=0.85",
+    "numpy>=2.2",
+    "pillow>=11",
+    "pypdfium2>=4.30",
+    "reportlab>=4.2",
+    "lxml>=5.4",
+    "networkx>=3.3",
+    "protobuf>=6",
+    "tqdm>=4.66",
+    "pyyaml>=6",
+    "ordered-set>=4.1",
+    "dill>=0.3.8",
+    "pyparsing>=3.1",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = [
+    "SAPIX",
+    "MATH/SEG",
+    "MATH/SUNDAI-JITSURYOKU",
+    "PDF-tools",
+]
+# 対象外: BenAI / rika / WORK_AI_RULE（Python 無し）
+# OCR ツール ~/tools/ndlocr-lite は workspace 外。共有 venv の python で src/ を直接実行する方針
+# （editable install しない＝ndlocr の厳密ピンと衝突させない）。
