@@ -27,3 +27,6 @@
 
 # misc caches
 .cache/
+
+# tmux plugins (TPM が再生成。XDGパスで repo working tree 内に出来るため除外)
+home/.config/tmux/plugins/

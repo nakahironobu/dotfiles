@@ -37,7 +37,7 @@ DOTFILES_REPO="${DOTFILES_REPO:-https://github.com/nakahironobu/dotfiles.git}"
 ANTIDOTE_DIR="${ANTIDOTE_DIR:-$HOME/.local/share/antidote}"
 
 # Plan A2: DO NOT install python here
-BREW_FORMULAE=( git fzf neovim ripgrep fd eza stow )
+BREW_FORMULAE=( git fzf neovim ripgrep fd eza stow tmux bat glow )
 BREW_CASKS=( wezterm )
 
 MESLO_FONT_BASE_URL="https://github.com/romkatv/powerlevel10k-media/raw/master"
