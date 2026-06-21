@@ -2,7 +2,7 @@
 
 ## 環境（マシン構成）
 
-- **開発機は2台**：この **Mac mini M1** と **Mac mini M4**。dotfiles（`nakahironobu/dotfiles`）と Claude 横断設定はこの2台で共有する。
+- **開発機は2台**：**Mac mini M4** と **Mac mini M1**。dotfiles（`nakahironobu/dotfiles`）と Claude 横断設定はこの2台で共有する。
 - **iMac は開発に使わない**：子供の閲覧用。SSD 容量が大きいので Google Drive 共有フォルダの「置き場」として使っているだけ。
   - Google Drive の「その他のパソコン/マイ iMac/…」は、その iMac のバックアップ鏡＝**単なるストレージ**であって開発機ではない（だから他機から書込み・移動・削除しないルールが効く。元データの集約はコピーで、削除は iMac 本人で）。
 

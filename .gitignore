@@ -27,6 +27,3 @@
 
 # misc caches
 .cache/
-
-# 端末固有（IDE設定・PC横断で共有しない）
-home/Library/Application Support/Antigravity/

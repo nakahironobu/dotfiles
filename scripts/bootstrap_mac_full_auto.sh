@@ -8,11 +8,6 @@ set -euo pipefail
 # - Xcode CLT (prompts GUI install if missing; exits -> re-run)
 # - Homebrew + packages (git fzf neovim ripgrep fd eza stow)
 # - WezTerm (cask + CLI path + font fallback + window layout injection + font_size)
-# - Google 日本語入力 (cask google-japanese-ime)
-#     NOTE: cask installs the app only. After install, add it once in
-#     System Settings > Keyboard > Text Input > Input Sources (+) >
-#     Japanese > "ひらがな (Google)", then remove "日本語 - ローマ字入力".
-#     (HIToolbox input-source enablement is fragile to script and needs a logout.)
 # - zsh (Antidote + p10k already in your dotfiles) + plugins + aliases
 #     - eza aliases with --classify (managed block appended/updated in dotfiles .zshrc)
 #     - zsh-syntax-highlighting (ensure last in .zsh_plugins.txt)
@@ -43,7 +38,7 @@ ANTIDOTE_DIR="${ANTIDOTE_DIR:-$HOME/.local/share/antidote}"
 
 # Plan A2: DO NOT install python here
 BREW_FORMULAE=( git fzf neovim ripgrep fd eza stow )
-BREW_CASKS=( wezterm google-japanese-ime )
+BREW_CASKS=( wezterm )
 
 MESLO_FONT_BASE_URL="https://github.com/romkatv/powerlevel10k-media/raw/master"
 
@@ -317,8 +312,6 @@ stow_apply_home() {
   done
 
   log "Applying stow: $DOTFILES_DIR/home -> ~"
-  # Pre-create deeply nested directories to ensure stow symlinks only files
-  mkdir -p "$HOME/Library/Application Support/Antigravity/User"
   (cd "$DOTFILES_DIR" && stow -v -t "$HOME" --restow home)
 
   log "stow done. backup: $backup_root"
@@ -516,68 +509,6 @@ nvim_headless_sync() {
   nvim --headless "+silent! checkhealth" +qa || true
 }
 
-ensure_antigravity_settings() {
-  local ag_settings="$HOME/Library/Application Support/Antigravity/User/settings.json"
-  if [[ ! -d "$(dirname "$ag_settings")" ]]; then
-     # App might not be installed or run yet, but we can set up the dir
-     mkdir -p "$(dirname "$ag_settings")"
-  fi
-  
-  log "Updating Antigravity settings.json (managed font/zoom)..."
-  python3 - <<PY
-import json
-import platform
-import os
-
-target = "$ag_settings"
-hostname = platform.node()
-
-# Per-host sizing configuration
-# Format: "Hostname": (FontSize, ZoomLevel)
-host_configs = {
-    "HironobunoMac-mini.local": (14, 0.5),
-    # Examples for other machines:
-    # "MacBookPro.local": (12, 0),
-}
-
-# Defaults
-default_size = 14
-default_zoom = 0.5
-constant_font_family = "MesloLGS NF"
-
-# Resolve settings
-size, zoom = host_configs.get(hostname, (default_size, default_zoom))
-
-# Desired settings (managed)
-managed = {
-    "terminal.integrated.fontFamily": constant_font_family,
-    "editor.fontSize": size,
-    "terminal.integrated.fontSize": size,
-    "window.zoomLevel": zoom,
-    "workbench.colorTheme": "Catppuccin Mocha",
-    "vim.useCtrlKeys": True,
-    "vim.useSystemClipboard": True,
-    "vim.hlsearch": True
-}
-
-current = {}
-if os.path.exists(target):
-    try:
-        with open(target, "r", encoding="utf-8") as f:
-            current = json.load(f)
-    except Exception:
-        pass
-
-# Merge/Override
-current.update(managed)
-
-with open(target, "w", encoding="utf-8") as f:
-    json.dump(current, f, indent=4)
-
-print(f"OK: Antigravity settings updated (Host: {hostname}, Size: {size}, Zoom: {zoom})")
-PY
-}
-
 ensure_default_shell_zsh() {
   local current_shell
   current_shell="$(dscl . -read "/Users/$USER" UserShell 2>/dev/null | awk '{print $2}' || true)"
@@ -593,7 +524,7 @@ summary() {
   echo "Installed: eza + zsh-syntax-highlighting"
   echo "eza aliases (ls/ll/la/za/zl, zz/zzz...)"
   echo "iCloud cd aliases: icloud / desktop / ayumi / manami / sapix / seg / kono"
-  echo "Unified Theme: Catppuccin Mocha (WezTerm / Neovim / Antigravity)"
+  echo "Unified Theme: Catppuccin Mocha (WezTerm / Neovim)"
   echo "WezTerm layout injected: right aligned, w=2/5, h=1/2, y slightly above center"
   echo "font_size = ${WEZTERM_FONT_SIZE}"
   echo "========================================"
@@ -632,8 +563,6 @@ main() {
 
   pin_treesitter_master_if_needed
   nvim_headless_sync
-
-  ensure_antigravity_settings
 
   ensure_default_shell_zsh
   summary
