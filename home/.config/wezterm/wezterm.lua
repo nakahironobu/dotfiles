@@ -50,6 +50,11 @@ return {
     "MesloLGS NF",
     "MesloLGS Nerd Font Mono",
     "MesloLGS Nerd Font",
+    -- 日本語は明示的に Hiragino を指定する。
+    -- 未指定だと中国語フォント(PingFang SC / Hiragino Sans GB)へ誤フォールバックし、
+    -- 句読点(。、)が中央寄せ＝中国語組版になってしまうため。
+    "Hiragino Sans",
+    "Hiragino Kaku Gothic ProN",
     "Menlo",
   }),
   font_size = FONT_SIZE,
