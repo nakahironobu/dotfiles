@@ -77,3 +77,6 @@ alias sapix-pull-records='~/Desktop/Projects/Infrastructure/SAPIX-sync/pull-reco
 alias google-my='cd "/Users/hironobu/Library/CloudStorage/GoogleDrive-hironobu@nakafamily.com/マイドライブ"'
 
 . "$HOME/.local/share/../bin/env"
+
+# tmux Claude ワークスペース用スクリプト (cc-workspace.sh 等)
+export PATH="$HOME/.config/tmux/scripts:$PATH"
