@@ -44,9 +44,10 @@ zstyle ':completion:*' cache-path "$XDG_CACHE_HOME/zsh/zcompcache"
 
 
 # ---- eza のエイリアス設定 (managed block でカバーされるため最小限に) ----
-alias projects='cd /Users/hironobu/Library/CloudStorage/GoogleDrive-hironobu@nakafamily.com/その他のパソコン/マイ\ iMac/Desktop/Projects/'
-alias ayumi='/Users/hironobu/Library/CloudStorage/GoogleDrive-hironobu@nakafamily.com/その他のパソコン/マイ\ iMac/Desktop/Ayumi'
-alias manami='/Users/hironobu/Library/CloudStorage/GoogleDrive-hironobu@nakafamily.com/その他のパソコン/マイ\ iMac/Desktop/Manami'
+alias projects='cd "/Users/hironobu/Library/CloudStorage/GoogleDrive-hironobu@nakafamily.com/その他のパソコン/マイ iMac/Desktop/Projects/"'
+alias ayumi='cd "/Users/hironobu/Library/CloudStorage/GoogleDrive-hironobu@nakafamily.com/その他のパソコン/マイ iMac/Desktop/Ayumi/"'
+alias manami='cd "/Users/hironobu/Library/CloudStorage/GoogleDrive-hironobu@nakafamily.com/その他のパソコン/マイ iMac/Desktop/Manami/"'
+
 # --- eza aliases (managed) ---
 alias ls='eza --classify'
 alias ll='eza -lh --classify'
@@ -58,11 +59,21 @@ alias zzz='eza --tree --level=3 --classify'
 alias zzzz='eza --tree --level=4 --classify'
 
 
-
 # --- direnv hook (managed) ---
 if command -v direnv >/dev/null 2>&1; then
   eval "$(direnv hook zsh)"
 fi
+export PATH=~/.npm-global/bin:$PATH
 
-# Added by Antigravity IDE
-export PATH="/Users/hironobu/.antigravity-ide/antigravity-ide/bin:$PATH"
+# --- SAPIX-sync aliases ---
+# Mac → Ubuntu (192.168.10.134) 教材アップデート反映 & 運用
+alias sapix-sync='~/Desktop/Projects/Infrastructure/SAPIX-sync/sync.sh'
+alias sapix-status='~/Desktop/Projects/Infrastructure/SAPIX-sync/status.sh'
+alias sapix-logs='~/Desktop/Projects/Infrastructure/SAPIX-sync/logs.sh'
+alias sapix-restart='~/Desktop/Projects/Infrastructure/SAPIX-sync/restart.sh'
+alias sapix-pull-records='~/Desktop/Projects/Infrastructure/SAPIX-sync/pull-records.sh'
+
+# Google Drive マイドライブへの移動
+alias google-my='cd "/Users/hironobu/Library/CloudStorage/GoogleDrive-hironobu@nakafamily.com/マイドライブ"'
+
+. "$HOME/.local/share/../bin/env"
