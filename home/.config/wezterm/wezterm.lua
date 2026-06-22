@@ -91,7 +91,7 @@ return {
   },
 
   -- ─── Window ──────────────────────────────────────────────────────────────
-  window_decorations = "RESIZE",
+  window_decorations = "TITLE | RESIZE",
   window_padding = { left = 4, right = 4, top = 4, bottom = 0 },
   macos_window_background_blur = 0,
 
