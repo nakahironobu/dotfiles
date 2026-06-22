@@ -76,7 +76,8 @@ alias sapix-pull-records='~/Desktop/Projects/Infrastructure/SAPIX-sync/pull-reco
 # Google Drive マイドライブへの移動
 alias google-my='cd "/Users/hironobu/Library/CloudStorage/GoogleDrive-hironobu@nakafamily.com/マイドライブ"'
 
-. "$HOME/.local/share/../bin/env"
+# uv スタンドアロンインストーラの env（Homebrew 版 uv では存在しないので存在時のみ読み込む）
+[ -f "$HOME/.local/bin/env" ] && . "$HOME/.local/bin/env"
 
 # tmux Claude ワークスペース用スクリプト (cc-workspace.sh 等)
 export PATH="$HOME/.config/tmux/scripts:$PATH"
