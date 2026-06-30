@@ -20,6 +20,17 @@ wezterm.on("gui-startup", function(cmd)
   gui:set_inner_size(inner_w, inner_h)
 end)
 
+-- ─── Maximize on demand (tmux 内のスクリプトから発火) ────────────────────────
+-- tmux の中からは外側の WezTerm 窓を直接操作できないため、スクリプト側で
+-- user-var `WEZTERM_MAXIMIZE` を立て（OSC 1337 / tmux passthrough 経由）、
+-- ここで受けて窓を最大化する。値は使わず、名前一致だけ見る。
+-- 使用箇所: ~/.config/tmux/scripts/claude-layout.sh（Ctrl-a → W）
+wezterm.on("user-var-changed", function(window, pane, name, value)
+  if name == "WEZTERM_MAXIMIZE" and window then
+    window:maximize()
+  end
+end)
+
 -- ─── Tab Title (tmux セッション名を表示) ─────────────────────────────────────
 wezterm.on("format-tab-title", function(tab, tabs, panes, config, hover, max_width)
   local title = tab.active_pane.title
@@ -107,16 +118,6 @@ return {
     { key = "5", mods = "CMD",       action = act.ActivateTab(4) },
     { key = "[", mods = "CMD|SHIFT", action = act.ActivateTabRelative(-1) },
     { key = "]", mods = "CMD|SHIFT", action = act.ActivateTabRelative(1) },
-
-    -- Claude ワークスペース起動 (新タブで cc-workspace 実行)
-    -- Cmd+Shift+K: 現在ディレクトリでワークスペース起動
-    {
-      key = "k",
-      mods = "CMD|SHIFT",
-      action = act.SpawnCommandInNewTab({
-        args = { "/bin/zsh", "-lc", "$HOME/.config/tmux/scripts/cc-workspace.sh" },
-      }),
-    },
 
     -- クリップボード
     { key = "c", mods = "CMD", action = act.CopyTo("Clipboard") },
