@@ -35,6 +35,21 @@ zstyle ':completion:*' matcher-list 'm:{a-z}={A-Za-z}'
 # ---- autosuggestions: 候補を部分的に受け入れる（→単語単位など） ----
 bindkey '^f' autosuggest-accept   # Ctrl+Fで提案を丸ごと採用（好みで変更可）
 
+# ---- コマンドラインを vim 操作にする（vi モード） ----
+# Esc でノーマルモード → h j k l・w b・0 ^ $・dd cw x 等が使える。i / a で挿入に戻る。
+# tmux の prefix が C-a のため行頭移動の C-a は tmux に取られるが、vi モードなら
+# 「Esc → 0（行頭）/ $（行末）」で代用できるので C-a 不要。p10k がモード表示を出す。
+bindkey -v
+export KEYTIMEOUT=1                          # Esc の反応を速く（10ms）
+# 挿入モードでも最低限の便利キーは残す（tmux 外での行頭/行末・履歴・補完受け入れ）
+bindkey -M viins '^a' beginning-of-line
+bindkey -M viins '^e' end-of-line
+bindkey -M viins '^f' autosuggest-accept     # ↑の既存設定を vi モードでも維持
+bindkey -M viins '^r' history-incremental-search-backward
+bindkey -M viins '^p' up-line-or-history
+bindkey -M viins '^n' down-line-or-history
+bindkey -M vicmd '^f' autosuggest-accept
+
 # ---- fzf-tab: プレビュー無し（高速のまま） ----
 zstyle ':fzf-tab:*' fzf-preview ''
 
