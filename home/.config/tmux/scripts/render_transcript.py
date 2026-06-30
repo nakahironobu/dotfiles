@@ -4,9 +4,10 @@
 使い方:
     render_transcript.py <transcript.jsonl> [--skip N] [--no-header] [--state FILE]
       → Markdown を標準出力へ
-    --skip N      : 先頭 N 行（raw 行）を飛ばす＝追記モードで「続きだけ」を出す
-    --no-header   : タイトル等の見出しを出さない（追記モード用）
-    --state FILE  : 読み終えた raw 行数を FILE に書く（次回の --skip に使う透かし）
+    --skip N         : 先頭 N 行（raw 行）を飛ばす＝追記モードで「続きだけ」を出す
+    --no-header      : タイトル等の見出しを出さない（追記モード用）
+    --state FILE     : 読み終えた raw 行数を FILE に書く（次回の --skip に使う透かし）
+    --break-label ID : 追記モードで「続き」の代わりに『新しいセッション ID』見出しを出す
 
 方針:
 - 会話本体（あなた=user / Claude=assistant）を時系列で忠実に出す。要約しない。
@@ -102,6 +103,7 @@ def parse_args(argv):
     skip = 0
     state = None
     header = True
+    break_label = None
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -109,14 +111,16 @@ def parse_args(argv):
             skip = int(argv[i + 1]); i += 2; continue
         if a == "--state":
             state = argv[i + 1]; i += 2; continue
+        if a == "--break-label":
+            break_label = argv[i + 1]; i += 2; continue
         if a == "--no-header":
             header = False; i += 1; continue
         path = a; i += 1
-    return path, skip, state, header
+    return path, skip, state, header, break_label
 
 
 def main():
-    path, skip, state, header = parse_args(sys.argv[1:])
+    path, skip, state, header, break_label = parse_args(sys.argv[1:])
     if not path:
         sys.exit("usage: render_transcript.py <transcript.jsonl> "
                  "[--skip N] [--no-header] [--state FILE]")
@@ -150,7 +154,11 @@ def main():
         ]
     elif events:
         # 追記モード: どこから続きか分かる区切りを入れる
-        out = ["", "---", f"_↓ 続き（追記 {gen}）_"]
+        if break_label:
+            out = ["", "---", "",
+                   f"## 🔄 新しいセッション `{break_label[:8]}` · {gen}"]
+        else:
+            out = ["", "---", f"_↓ 続き（追記 {gen}）_"]
     else:
         out = []
 
