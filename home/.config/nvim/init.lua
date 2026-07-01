@@ -982,6 +982,20 @@ require('lazy').setup({
     --    - Treesitter + textobjects: https://github.com/nvim-treesitter/nvim-treesitter-textobjects
   },
 
+  { -- render-markdown.nvim: markdown をバッファ内で整形表示（表を罫線付きの表として描画）
+    'MeanderingProgrammer/render-markdown.nvim',
+    dependencies = {
+      'nvim-treesitter/nvim-treesitter', -- markdown / markdown_inline パーサを使用（導入済み）
+      'nvim-tree/nvim-web-devicons',     -- アイコン（導入済み）
+    },
+    ft = { 'markdown' }, -- markdown を開いたときだけ有効化
+    opts = {
+      -- カーソルがある行だけ生の markdown に戻り、その場で編集できる（既定でON）。
+      -- 表は罫線で囲み、列幅を揃えて描画する。
+      pipe_table = { preset = 'round' }, -- 表の角を丸い罫線に（'heavy' / 'double' も可）
+    },
+  },
+
   { -- noice.nvim: コマンドライン ( : ) と検索 ( / ? ) を画面上部の大きなポップアップに表示する
     'folke/noice.nvim',
     event = 'VeryLazy',
