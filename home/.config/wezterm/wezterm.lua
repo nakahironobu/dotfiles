@@ -123,6 +123,11 @@ return {
     { key = "c", mods = "CMD", action = act.CopyTo("Clipboard") },
     { key = "v", mods = "CMD", action = act.PasteFrom("Clipboard") },
 
+    -- 改行: Shift+Return で改行文字(LF)を送る。
+    -- ターミナルは通常 Shift+Return を素の Return と区別せず送らないため、
+    -- ここで LF を送って Claude Code 等のプロンプトで改行できるようにする。
+    { key = "Enter", mods = "SHIFT", action = act.SendString("\n") },
+
     -- フォントサイズ
     { key = "+", mods = "CMD",       action = act.IncreaseFontSize },
     { key = "-", mods = "CMD",       action = act.DecreaseFontSize },

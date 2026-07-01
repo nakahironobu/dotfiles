@@ -982,6 +982,32 @@ require('lazy').setup({
     --    - Treesitter + textobjects: https://github.com/nvim-treesitter/nvim-treesitter-textobjects
   },
 
+  { -- noice.nvim: コマンドライン ( : ) と検索 ( / ? ) を画面上部の大きなポップアップに表示する
+    'folke/noice.nvim',
+    event = 'VeryLazy',
+    dependencies = {
+      'MunifTanjim/nui.nvim', -- 既に neo-tree でも使用（lazy が重複を解決）
+    },
+    opts = {
+      cmdline = {
+        enabled = true,
+        view = 'cmdline_popup', -- : / ? を上部中央のポップアップで表示（noice の既定ビュー）
+      },
+      -- ここでは cmdline だけを置き換え、他は素の Neovim のまま残す（挙動を最小限に）。
+      messages = { enabled = false },
+      notify = { enabled = false },
+      lsp = {
+        progress = { enabled = false },
+        hover = { enabled = false },
+        signature = { enabled = false },
+      },
+      presets = {
+        bottom_search = false, -- 検索 ( / ) も下段ではなく上部ポップアップに出す
+        long_message_to_split = true,
+      },
+    },
+  },
+
   -- The following comments only work if you have downloaded the kickstart repo, not just copy pasted the
   -- init.lua. If you want these files, they are in the repository, so you can just download them and
   -- place them in the correct locations.
