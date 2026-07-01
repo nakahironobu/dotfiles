@@ -17,23 +17,28 @@ if [ -z "${TMUX:-}" ]; then
   exit 1
 fi
 
-# 起動元ペインの作業ディレクトリ＝対象プロジェクト
-PROJ="$(tmux display-message -p '#{pane_current_path}')"
+# 対象プロジェクト: 第1引数があればそれ（sessionizer が fzf で選んだフォルダ）。
+# 無ければ従来どおり起動元ペインの作業ディレクトリ。
+PROJ="${1:-$(tmux display-message -p '#{pane_current_path}')}"
+if [ ! -d "$PROJ" ]; then
+  tmux display-message "claude-layout: フォルダが見つかりません: $PROJ"
+  exit 1
+fi
 
-# 新規ウィンドウ。最初の1ペインが「右上の claude」になる
-tmux new-window -c "$PROJ" -n claude
+# 新規ウィンドウ。最初の1ペイン = 「右上の claude」。pane id を明示保持して
+# 以降は -t で確実に対象ペインを指す（display-popup 経由でも active pane に依存しない）。
+claude_pane="$(tmux new-window -c "$PROJ" -n claude -P -F '#{pane_id}')"
 # 先に claude（毎回まっさらな新セッション）を起動しておく。
 #   こうすると、続く左ペインの claude-log.sh は「いま起動した現行セッション」を掴め、
 #   prefix + A の追記先（固定ログ）と必ず一致する。新規プロジェクトでも jsonl 生成を待てる。
-tmux send-keys "claude" Enter
+tmux send-keys -t "$claude_pane" "claude" Enter
 # 左に会話ログ(nvim)を 42% 幅で切り出す（-b = 新ペインを左側に）。固定ログを開く。
-tmux split-window -h -b -l 42% -c "$PROJ" "$SDIR/claude-log.sh '$PROJ'"
-# 右の列へ移動して上下に分割（下＝作業 shell・高さ 30%）。
-# shell ペインの id を控える（後で「最大化トリガ」をこの idle ペインの tty へ送る）
-tmux select-pane -R
-shell_pane="$(tmux split-window -v -l 30% -c "$PROJ" -P -F '#{pane_id}')"
+tmux split-window -h -b -l 42% -c "$PROJ" -t "$claude_pane" "$SDIR/claude-log.sh '$PROJ'"
+# 右下 = 作業 shell（claude ペインを縦分割・高さ 30%）。id を控える
+#   （後で「最大化トリガ」をこの idle ペインの tty へ送る）。
+shell_pane="$(tmux split-window -v -l 30% -c "$PROJ" -t "$claude_pane" -P -F '#{pane_id}')"
 # 右上（claude）にフォーカスを戻して終了
-tmux select-pane -U
+tmux select-pane -t "$claude_pane"
 
 # ─── 外側の WezTerm 窓を最大化 ───────────────────────────────────────────────
 # tmux の中からは外側の WezTerm を直接操作できない。WezTerm の user-var
