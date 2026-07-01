@@ -991,8 +991,16 @@ require('lazy').setup({
     ft = { 'markdown' }, -- markdown を開いたときだけ有効化
     opts = {
       -- カーソルがある行だけ生の markdown に戻り、その場で編集できる（既定でON）。
-      -- 表は罫線で囲み、列幅を揃えて描画する。
-      pipe_table = { preset = 'round' }, -- 表の角を丸い罫線に（'heavy' / 'double' も可）
+      pipe_table = {
+        preset = 'round', -- 表の角を丸い罫線に（'heavy' / 'double' も可）
+        cell = 'trimmed', -- セルの余白を詰めて表の横幅を抑える
+      },
+      -- 狭いペインだと表がペイン幅を超えて折り返し、罫線が崩れる。描画中は wrap を切って
+      -- 表の形（1行=1行）を保つ。編集(挿入モード)や描画OFF時は通常の折り返しに戻す。
+      -- ※ 横に長い表は Ctrl+a z でペインを全幅にズームすると全体が収まって見やすい。
+      win_options = {
+        wrap = { default = true, rendered = false },
+      },
     },
   },
 
