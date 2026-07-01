@@ -1,6 +1,8 @@
 # Claude Code ワークスペース — キーバインド & 使い方
 
 > プレフィックスキー: **`Ctrl-a`**（デフォルトの `Ctrl-b` から変更）
+>
+> ハーネス全体の「何をすれば何ができるか」は [`HARNESS.md`](./HARNESS.md) を参照。本ファイルは tmux のキー詳細。
 
 ## 基本の流れ
 
@@ -8,7 +10,7 @@ claude の作業場は「tmux のウィンドウ」を1つの単位として増�
 
 | 操作 | 結果 |
 |------|------|
-| `Ctrl-a` → `W` | **新しいウィンドウに claude 作業場を1つ追加**。今の作業ウィンドウは触らない。 |
+| `Ctrl-a` → `W` | **fzf でプロジェクトを選び、そのフォルダに claude 作業場を1つ追加**。今の作業ウィンドウは触らない。 |
 
 `Ctrl-a → W` で開くウィンドウのレイアウト（`claude-layout.sh`）：
 
@@ -20,7 +22,7 @@ claude の作業場は「tmux のウィンドウ」を1つの単位として増�
 └────────────┴───────────────┘
 ```
 
-- claude は **今いるペインの作業ディレクトリ**で起動する。別プロジェクトを始めたいときは、そのフォルダへ `cd` してから `Ctrl-a → W`。
+- `Ctrl-a → W` を押すと **fzf のプロジェクト選択ポップアップ**が開き、選んだフォルダで claude 作業場を作る（候補ルールは `claude-sessionizer.sh` 参照）。
 - ウィンドウを開いた直後に **WezTerm の窓を最大化**する（`claude-layout.sh` が WezTerm の user-var を立てる → `wezterm.lua` の `user-var-changed` → `window:maximize()`）。
 
 ---
@@ -29,7 +31,7 @@ claude の作業場は「tmux のウィンドウ」を1つの単位として増�
 
 | キー | 機能 |
 |------|------|
-| `Ctrl-a` → `W` | 新しいウィンドウに claude 作業場を作成（左=会話ログ / 右上=claude / 右下=shell）＋ WezTerm 窓を最大化 |
+| `Ctrl-a` → `W` | fzf でプロジェクトを選び、その作業場を作成（左=会話ログ / 右上=claude / 右下=shell）＋ WezTerm 窓を最大化 |
 | `Ctrl-a` → `A` | 現在の会話を固定ログ(md)に**追記**（Append・手編集は保持・nvim へ自動反映） |
 | `Ctrl-a` → `G` | Git ログ（グラフ表示・popup） |
 | `Ctrl-a` → `S` | セッション切替（fzf・popup） |
@@ -108,7 +110,7 @@ claude の作業場は「tmux のウィンドウ」を1つの単位として増�
 | `Ctrl-a` → `U` | プラグインアップデート |
 | `Ctrl-a` → `Alt+u` | 未使用プラグイン削除 |
 
-導入プラグイン: `tpm` / `tmux-sensible` / `tmux-resurrect` / `tmux-continuum`（自動保存・復元 ON）。
+導入プラグイン: `tpm` / `tmux-sensible` / `tmux-resurrect` / `tmux-continuum`（自動保存 ON・**自動復元 OFF**。作業場は `Ctrl-a W` を押したときだけ作る方針のため）。
 
 ---
 
@@ -118,7 +120,8 @@ claude の作業場は「tmux のウィンドウ」を1つの単位として増�
 
 | スクリプト | 説明 |
 |-----------|------|
-| `claude-layout.sh [dir]` | 新しいウィンドウに claude 作業場を作成（`Ctrl-a → W` が呼ぶ）。最後に WezTerm 窓を最大化。 |
+| `claude-sessionizer.sh` | `Ctrl-a → W` が呼ぶ。`fd`→`fzf` でプロジェクトを選び `claude-layout.sh` に渡す。 |
+| `claude-layout.sh [dir]` | 指定フォルダ（無ければ現ペインの cwd）に claude 作業場を作成。最後に WezTerm 窓を最大化。 |
 | `claude-log.sh [PROJ] [--fresh\|--update]` | 会話ログを読みやすい md にして nvim で開く（左ペイン）。`--update` で固定ログ末尾に追記（`Ctrl-a → A`）。`--fresh` で作り直し。 |
 | `render_transcript.py` | Claude の `.jsonl` 会話ログ → Markdown 整形（`claude-log.sh` が内部利用） |
 
