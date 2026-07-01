@@ -1003,6 +1003,7 @@ require('lazy').setup({
       },
       presets = {
         bottom_search = false, -- 検索 ( / ) も下段ではなく上部ポップアップに出す
+        command_palette = true, -- : の入力欄と補完候補を1枠にまとめて中央寄りに表示
         long_message_to_split = true,
       },
     },
