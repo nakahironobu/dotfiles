@@ -33,6 +33,7 @@ claude の作業場は「tmux のウィンドウ」を1つの単位として増�
 |------|------|
 | `Ctrl-a` → `W` | fzf でプロジェクトを選び、その作業場を作成（左=会話ログ / 右上=claude / 右下=shell）＋ WezTerm 窓を最大化 |
 | `Ctrl-a` → `A` | 現在の会話を固定ログ(md)に**追記**（Append・手編集は保持・nvim へ自動反映） |
+| `Ctrl-a` → `F` | 関連ドキュメント(md)を fzf で選び**左ペインの nvim で開く**（履歴と同じく閲覧・編集） |
 | `Ctrl-a` → `G` | Git ログ（グラフ表示・popup） |
 | `Ctrl-a` → `S` | セッション切替（fzf・popup） |
 | `Ctrl-a` → `r` | tmux 設定を再読込（`✓ Config reloaded`） |
@@ -122,7 +123,8 @@ claude の作業場は「tmux のウィンドウ」を1つの単位として増�
 |-----------|------|
 | `claude-sessionizer.sh` | `Ctrl-a → W` が呼ぶ。`fd`→`fzf` でプロジェクトを選び `claude-layout.sh` に渡す。 |
 | `claude-layout.sh [dir]` | 指定フォルダ（無ければ現ペインの cwd）に claude 作業場を作成。最後に WezTerm 窓を最大化。 |
-| `claude-log.sh [PROJ] [--fresh\|--update]` | 会話ログを読みやすい md にして nvim で開く（左ペイン）。`--update` で固定ログ末尾に追記（`Ctrl-a → A`）。`--fresh` で作り直し。 |
+| `claude-log.sh [PROJ] [--fresh\|--update]` | 会話ログを読みやすい md にして nvim で開く（左ペイン・`--listen` サーバ化）。`--update` で固定ログ末尾に追記（`Ctrl-a → A`）。`--fresh` で作り直し。 |
+| `claude-open-doc.sh` | `Ctrl-a → F` の md ピッカー。関連 md を fzf で選び左 nvim に `--remote` で開く。 |
 | `render_transcript.py` | Claude の `.jsonl` 会話ログ → Markdown 整形（`claude-log.sh` が内部利用） |
 
 ---

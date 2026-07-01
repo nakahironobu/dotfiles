@@ -67,6 +67,17 @@ WezTerm + tmux + Neovim + Claude Code を束ねた、**プロジェクト単位�
 - 横に長い表は狭い左ペインだと折り返して崩れます → **`Ctrl-a` → `z` でペインを全幅にズーム**すると崩れず表示（もう一度で戻る）。本文は常に折り返しで読めます。
 - 整形/生の切替：nvim 内で `:RenderMarkdown toggle`。
 
+**関連ドキュメントを左ペインで開く**
+
+| やること | できること |
+|----------|-----------|
+| `Ctrl-a` → `F` | 関連 md（会話ログ・プロジェクト内の md・`HARNESS.md` 等）を fzf で選び、**左ペインの nvim にバッファとして開く** |
+
+- 会話ログと**同じ nvim・同じ設定**（render-markdown 等）で閲覧・編集できます。会話ログのバッファは残るので `:b#` / `:bnext` で行き来できます。
+- 仕組み：左ペインの nvim は `--listen` で RPC サーバとして起動しており、`Ctrl-a F` が `--remote` で同じ nvim に開きます（別 nvim を殺さず、未保存も失いません）。
+- 候補の範囲は `claude-open-doc.sh` の `ROOTS` / `EXTRA` で調整できます。
+- ※ この機能を導入する前に作った作業場では左 nvim がサーバでないため、`Ctrl-a W` で作業場を作り直すと有効になります。
+
 ---
 
 ## 4. Neovim の表示強化
@@ -86,6 +97,7 @@ WezTerm + tmux + Neovim + Claude Code を束ねた、**プロジェクト単位�
 |------|------|
 | `W` | 作業場を作成（**fzf でプロジェクト選択**）＋ WezTerm 最大化 |
 | `A` | 会話を固定ログに追記（Append） |
+| `F` | 関連ドキュメント(md)を fzf で選び、**左ペインの nvim で開く**（履歴と同じく閲覧・編集） |
 | `G` | Git ログ（graph・popup） |
 | `S` | セッション切替（fzf・popup） |
 | `z` | ペイン全幅ズーム（横長の表の閲覧に便利） |
@@ -145,7 +157,8 @@ WezTerm + tmux + Neovim + Claude Code を束ねた、**プロジェクト単位�
 | `~/.config/tmux/tmux.conf` | tmux 設定 |
 | `~/.config/tmux/scripts/claude-sessionizer.sh` | `Ctrl-a W` のプロジェクト選択（`fd` → `fzf`） |
 | `~/.config/tmux/scripts/claude-layout.sh [dir]` | 3ペインの作業場を生成（引数のフォルダ、無ければ現ペインの cwd） |
-| `~/.config/tmux/scripts/claude-log.sh [PROJ] [--fresh\|--update]` | 会話ログを md 整形して nvim で開く／`--update` で追記／`--fresh` で作り直し |
+| `~/.config/tmux/scripts/claude-log.sh [PROJ] [--fresh\|--update]` | 会話ログを md 整形して nvim で開く（左 nvim を `--listen` サーバ化）／`--update` で追記／`--fresh` で作り直し |
+| `~/.config/tmux/scripts/claude-open-doc.sh` | `Ctrl-a F` の md ピッカー。選んだ md を左 nvim に `--remote` で開く |
 | `~/.config/tmux/scripts/render_transcript.py` | Claude の `.jsonl` → Markdown 整形 |
 | `~/.config/wezterm/wezterm.lua` | WezTerm 設定 |
 | `~/.config/nvim/init.lua` | Neovim 設定（noice / render-markdown 等） |

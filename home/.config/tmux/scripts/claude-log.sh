@@ -110,8 +110,18 @@ if [ ! -f "$OUT" ] || [ "$FRESH" = 1 ]; then
   create_fresh "$latest"
 fi
 
-# autoread + 定期チェックで、--update の追記を自動で取り込む
-nvim -c 'set autoread' \
+# 固定ログは「複数の作業場ウィンドウが同じ1ファイルを開く」前提（OUT はプロジェクト単位で共有）。
+# nvim のスワップファイルは衝突して E325/W325『swapfile from Nvim process …』を左ペインに出すだけで
+# 害しかない（このログは再生成可能な閲覧・追記用）。-n でスワップを完全に無効化して衝突を消す。
+# autoread + 定期チェックで、--update の追記を自動で取り込む。
+# 左ペインの nvim を RPC サーバとして起動し、ソケットをこのウィンドウの変数に記録する。
+# これで prefix + F（claude-open-doc.sh）が --remote で「この nvim」に md を開ける
+# ＝履歴画面と同じ nvim・同じ設定（render-markdown 等）で閲覧・編集できる。
+NVIM_SOCK="${TMPDIR:-/tmp}/claude-log-nvim-$(tmux display -p '#{pane_id}' | tr -cd '0-9').sock"
+rm -f "$NVIM_SOCK"
+tmux set-option -w @claude_log_sock "$NVIM_SOCK" 2>/dev/null || true
+nvim -n --listen "$NVIM_SOCK" \
+     -c 'set autoread' \
      -c 'autocmd CursorHold,CursorHoldI,FocusGained,BufEnter * silent! checktime' \
      "$OUT"
 # nvim を閉じてもペインを残す
