@@ -19,14 +19,29 @@ read -r LEFT_ID LEFT_CMD < <(tmux list-panes -F '#{pane_id} #{pane_at_left} #{pa
 PROJ="$(tmux display -p -t "$LEFT_ID" '#{pane_current_path}')"
 LOG="$HOME/.claude/conversation-exports/$(basename "$PROJ").md"
 
-# ── 候補: 会話ログ + プロジェクト内 md + ハーネス doc（ここを編集すれば範囲を変えられる）──
-ROOTS=("$PROJ")
+# ── 候補: 会話ログ + プロジェクト内 md + CLAUDE.md連鎖 + skill + ハーネス doc ──
+#    「そのプロジェクトに効くもの」を入れる。$PROJ の階層だけでなく、上位に遡って
+#    効く CLAUDE.md と global 置きの skill も対象にする（ここを編集すれば範囲を変えられる）。
+ROOTS=("$PROJ" "$HOME/.claude/skills")   # プロジェクト内 md ＋ グローバル skill(SKILL.md)
 EXTRA=("$HOME/.config/tmux/HARNESS.md" "$HOME/.config/tmux/KEYBINDINGS.md")
 PRUNE=(.git node_modules .venv venv vendor __pycache__ .obsidian)
 fd_excludes=(); for p in "${PRUNE[@]}"; do fd_excludes+=(--exclude "$p"); done
 
+# $PROJ から上位（$HOME まで）へ遡って効く CLAUDE.md 連鎖 ＋ global 正本
+claude_chain() {
+  local d="$PROJ"
+  while :; do
+    [ -f "$d/CLAUDE.md" ]       && printf '%s\n' "$d/CLAUDE.md"
+    [ -f "$d/CLAUDE.local.md" ] && printf '%s\n' "$d/CLAUDE.local.md"
+    { [ "$d" = "$HOME" ] || [ "$d" = "/" ]; } && break
+    d="$(dirname "$d")"
+  done
+  [ -f "$HOME/.claude/CLAUDE.md" ] && printf '%s\n' "$HOME/.claude/CLAUDE.md"
+}
+
 list() {
   [ -f "$LOG" ] && printf '%s\n' "$LOG"                       # 会話ログを先頭に
+  claude_chain                                                # CLAUDE.md 連鎖（重複は後段の awk で除去）
   for r in "${ROOTS[@]}"; do [ -d "$r" ] && fd -t f -e md -e markdown "${fd_excludes[@]}" . "$r"; done
   for f in "${EXTRA[@]}"; do [ -f "$f" ] && printf '%s\n' "$f"; done
 }
