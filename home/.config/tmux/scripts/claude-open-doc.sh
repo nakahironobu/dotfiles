@@ -43,10 +43,30 @@ SEL="$(list | awk '!seen[$0]++' \
 
 SOCK="$(tmux show-option -wqv @claude_log_sock)"
 if [ -n "$SOCK" ] && [ -S "$SOCK" ] && { [ "$LEFT_CMD" = nvim ] || [ "$LEFT_CMD" = vim ]; }; then
-  # 既存の左 nvim にバッファとして開く（会話ログのバッファは残る。:b# で戻れる）
+  # ① 通常経路: 既存の左 nvim(RPC サーバ)にバッファとして開く。
+  #    会話ログのバッファは残るので :b# / :ls で戻れる（非破壊）。
   nvim --server "$SOCK" --remote "$SEL"
+elif [ "$LEFT_CMD" = nvim ] || [ "$LEFT_CMD" = vim ]; then
+  # ② 左は生きた nvim だが RPC サーバではない（この機能の導入前の作業場、
+  #    または過去に会話ログを閉じた後 等でソケットが無い）。ここで
+  #    respawn-pane -k すると“開いている会話ログごと nvim を殺す”＝バッファ
+  #    全消失になる（← これが「F の後に元の履歴へ戻れない」不具合の正体）。
+  #    絶対に殺さず、send-keys で既存 nvim に :edit させる。会話ログのバッファは
+  #    残り :b# で戻れる（サーバが無くても非破壊）。
+  esc="$(printf '%s' "$SEL" | sed 's/[ \\%#|]/\\&/g')"  # :edit 用に空白・特殊文字をエスケープ
+  tmux send-keys -t "$LEFT_ID" Escape
+  tmux send-keys -t "$LEFT_ID" -l ":edit $esc"
+  tmux send-keys -t "$LEFT_ID" Enter
 else
-  # サーバ未起動（この機能の導入前に作った作業場 等）→ 左ペインを nvim で開き直す
-  tmux respawn-pane -k -t "$LEFT_ID" "nvim -n -c 'set autoread' \"$SEL\""
+  # ③ 左ペインが nvim ですらない（会話ログを閉じてシェルに戻った 等）。
+  #    ここには壊す会話ログが無いので左ペインを nvim で開き直す。その際
+  #    --listen で RPC サーバとして起動し、ソケットをウィンドウ変数に記録して
+  #    以後の prefix+F を ① の非破壊経路へ復帰させる。
+  _tmp="${TMPDIR:-/tmp}"; _tmp="${_tmp%/}"
+  NEWSOCK="$_tmp/claude-log-nvim-$(printf '%s' "$LEFT_ID" | tr -cd '0-9').sock"
+  rm -f "$NEWSOCK"
+  tmux set-option -w @claude_log_sock "$NEWSOCK" 2>/dev/null || true
+  tmux respawn-pane -k -t "$LEFT_ID" \
+    "nvim -n --listen '$NEWSOCK' -c 'set autoread' \"$SEL\""
 fi
 tmux select-pane -t "$LEFT_ID"
