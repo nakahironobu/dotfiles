@@ -48,3 +48,6 @@ Python は終始一貫 `uv` を使う（詳細は `~/.claude/CLAUDE.md`）。外
   - **vendored 外部ツール**（`vendor/ndlocr-lite` 等＝専用 venv）。
   - shebang（明示起動するので実害なし）。
 - **新しい Python リポジトリ**は uv プロジェクト化（自前 `pyproject.toml`）か workspace member に追加してから `uv run` を使う（非プロジェクトのフォルダでは共有 venv を解決できない）。
+
+## 用語：「leader＋キー」＝ tmux プレフィックス（Ctrl+a）
+配下プロジェクトの会話で「leader F」「leader ○」と書いたら、**tmux のプレフィックスキーを押してから ○ を押す**操作を指す。この環境では tmux プレフィックスをデフォルトの `Ctrl+b` から **`Ctrl+a`** に変更済みなので、「leader F」＝ `Ctrl+a` に続けて `F`。「leader」＝ tmux の leader（＝プレフィックス＝ `Ctrl+a`）の意。
