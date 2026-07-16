@@ -31,6 +31,12 @@ cd ~/dotfiles
 
 ```
 
+Mac土台のセットアップにはKindle Capture CLIの導入も含まれます。単独で再導入する場合は次を実行します。
+
+```sh
+~/dotfiles/scripts/install-kindle-capture.sh
+```
+
 #### Xcode CLT のダイアログが出た場合
 インストールを完了したら、もう一度実行してください:
 
@@ -144,7 +150,24 @@ stow 適用前に、衝突しやすい既存ファイル/ディレクトリが *
   - managed window layout（起動時の位置/サイズ）
   - `font_size`（`WEZTERM_FONT_SIZE`）
 
-### 6) Neovim（headless）
+### 6) Kindle Capture CLI
+
+Amazon Kindleで通常表示されているページを、WezTermから指定範囲の連番PNGとして保存します。DRM解除やKindleファイルの抽出は行いません。
+
+```sh
+kindle-capture 188 220
+```
+
+実行時にprefixと保存先を質問します。既定値は、ページ送り後1.3秒待機、右矢印、左右余白を残し、上部のKindleタイトルバーだけを除外する設定です。
+
+再現に必要なソースは`tools/kindle-capture/`、インストーラーは`scripts/install-kindle-capture.sh`にあります。インストーラーは各Mac上でSwift補助プログラムをビルドし、次を作成します。
+
+- `~/Projects/PDF-tools/kindle_capture/`
+- `~/.local/bin/kindle-capture`
+
+初回のみ、macOSの「プライバシーとセキュリティ」でWezTermに「アクセシビリティ」と「画面収録」を許可してください。この権限自体はmacOSの仕様上dotfilesから自動付与できません。
+
+### 7) Neovim（headless）
 以下を headless で実行します:
 - `Lazy! sync`
 - `TSUpdateSync`

@@ -1,0 +1,227 @@
+#!/bin/zsh
+set -euo pipefail
+
+SCRIPT_DIR="${0:A:h}"
+CROP_HELPER="${KINDLE_CROP_HELPER:-$SCRIPT_DIR/crop_black_borders}"
+KINDLE_BUNDLE_ID="com.amazon.Lassen"
+MAX_CAPTURE_COUNT=500
+
+usage() {
+  cat <<'EOF'
+使い方:
+  kindle-capture 開始ページ 終了ページ [オプション]
+
+最小例:
+  kindle-capture 188 220
+
+指定例:
+  kindle-capture 188 220 --prefix taizen --output ~/Documents/KindlePNG \
+    --direction left --delay 2.5 --mode page
+
+オプション:
+  -o, --output DIR       保存先（省略時はWezTerm上で質問）
+  -p, --prefix NAME      ファイル名の先頭文字（省略時はWezTerm上で質問）
+  -d, --delay SEC        ページ送り後の待機秒数（既定: 1.3）
+      --direction DIR    right または left（既定: right）
+      --mode MODE        page または margin（既定: margin）
+                         page  : 上部バーと検出可能な左右余白を除外
+                         margin: 上部バーだけ除外
+      --countdown SEC    開始前の待機秒数（既定: 2）
+  -h, --help             この説明を表示
+
+入力したページ番号はファイル名と枚数の管理に使います。
+実行前にKindleで開始ページを表示してください。
+EOF
+}
+
+fail() {
+  print -u2 -- "エラー: $*"
+  exit 1
+}
+
+if (( $# == 0 )); then
+  usage
+  exit 0
+fi
+
+if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+(( $# >= 2 )) || fail "開始ページと終了ページを指定してください。"
+START_PAGE="$1"
+END_PAGE="$2"
+shift 2
+
+OUTPUT_DIR="$PWD"
+FILE_PREFIX="kindle"
+OUTPUT_SPECIFIED=0
+PREFIX_SPECIFIED=0
+PAGE_DELAY="1.3"
+DIRECTION="right"
+CAPTURE_MODE="margin"
+COUNTDOWN="2"
+
+while (( $# > 0 )); do
+  case "$1" in
+    -o|--output)
+      (( $# >= 2 )) || fail "$1にはフォルダを指定してください。"
+      OUTPUT_DIR="$2"
+      OUTPUT_SPECIFIED=1
+      shift 2
+      ;;
+    -p|--prefix)
+      (( $# >= 2 )) || fail "$1には文字列を指定してください。"
+      FILE_PREFIX="$2"
+      PREFIX_SPECIFIED=1
+      shift 2
+      ;;
+    -d|--delay)
+      (( $# >= 2 )) || fail "$1には秒数を指定してください。"
+      PAGE_DELAY="$2"
+      shift 2
+      ;;
+    --direction)
+      (( $# >= 2 )) || fail "$1にはrightまたはleftを指定してください。"
+      DIRECTION="$2"
+      shift 2
+      ;;
+    --mode)
+      (( $# >= 2 )) || fail "$1にはpageまたはmarginを指定してください。"
+      CAPTURE_MODE="$2"
+      shift 2
+      ;;
+    --countdown)
+      (( $# >= 2 )) || fail "$1には秒数を指定してください。"
+      COUNTDOWN="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      fail "不明なオプションです: $1"
+      ;;
+  esac
+done
+
+if (( PREFIX_SPECIFIED == 0 )); then
+  read -r "PREFIX_REPLY?ファイル名のprefixを入力してください [kindle]: "
+  FILE_PREFIX="${PREFIX_REPLY:-kindle}"
+fi
+
+if (( OUTPUT_SPECIFIED == 0 )); then
+  read -r "OUTPUT_REPLY?保存先フォルダを入力してください [$PWD]: "
+  OUTPUT_DIR="${OUTPUT_REPLY:-$PWD}"
+fi
+
+if [[ "$OUTPUT_DIR" == "~/"* ]]; then
+  OUTPUT_DIR="$HOME/${OUTPUT_DIR#\~/}"
+elif [[ "$OUTPUT_DIR" == "~" ]]; then
+  OUTPUT_DIR="$HOME"
+fi
+
+[[ "$START_PAGE" =~ '^[0-9]+$' ]] || fail "開始ページは0以上の整数にしてください。"
+[[ "$END_PAGE" =~ '^[0-9]+$' ]] || fail "終了ページは0以上の整数にしてください。"
+(( END_PAGE >= START_PAGE )) || fail "終了ページは開始ページ以上にしてください。"
+
+CAPTURE_COUNT=$(( END_PAGE - START_PAGE + 1 ))
+(( CAPTURE_COUNT <= MAX_CAPTURE_COUNT )) || fail "一度に保存できるのは最大${MAX_CAPTURE_COUNT}ページです。"
+
+[[ "$PAGE_DELAY" =~ '^[0-9]+([.][0-9]+)?$' ]] || fail "待機時間は0以上の数値にしてください。"
+[[ "$COUNTDOWN" =~ '^[0-9]+([.][0-9]+)?$' ]] || fail "開始前待機は0以上の数値にしてください。"
+[[ "$DIRECTION" == "right" || "$DIRECTION" == "left" ]] || fail "--directionはrightまたはleftです。"
+[[ "$CAPTURE_MODE" == "page" || "$CAPTURE_MODE" == "margin" ]] || fail "--modeはpageまたはmarginです。"
+[[ -x "$CROP_HELPER" ]] || fail "切り抜きプログラムが見つかりません: $CROP_HELPER"
+
+FILE_PREFIX="${FILE_PREFIX//\//_}"
+FILE_PREFIX="${FILE_PREFIX//:/_}"
+[[ -n "$FILE_PREFIX" ]] || FILE_PREFIX="kindle"
+
+mkdir -p -- "$OUTPUT_DIR"
+OUTPUT_DIR="$(cd -- "$OUTPUT_DIR" && pwd -P)"
+
+for (( page = START_PAGE; page <= END_PAGE; page++ )); do
+  printf -v PAGE_TEXT '%04d' "$page"
+  CANDIDATE="$OUTPUT_DIR/${FILE_PREFIX}_p${PAGE_TEXT}.png"
+  [[ ! -e "$CANDIDATE" ]] || fail "同名ファイルが既にあります（上書きしません）: $CANDIDATE"
+done
+
+KEY_CODE=124
+[[ "$DIRECTION" == "left" ]] && KEY_CODE=123
+
+print -- "Kindle Page Capture CLI"
+print -- "  範囲     : ${START_PAGE}〜${END_PAGE}（${CAPTURE_COUNT}ページ）"
+print -- "  保存先   : $OUTPUT_DIR"
+print -- "  接頭辞   : $FILE_PREFIX"
+print -- "  ページ送り: $DIRECTION"
+print -- "  待機時間 : ${PAGE_DELAY}秒"
+print -- "  モード   : $CAPTURE_MODE"
+print -- ""
+print -- "Kindleで開始ページを表示しておいてください。${COUNTDOWN}秒後に開始します。"
+
+/usr/bin/open -b "$KINDLE_BUNDLE_ID" || fail "Amazon Kindleを起動できません。"
+/bin/sleep "$COUNTDOWN"
+
+RAW_PATH=""
+cleanup() {
+  [[ -z "$RAW_PATH" ]] || /bin/rm -f -- "$RAW_PATH"
+}
+trap cleanup EXIT INT TERM
+
+PREVIOUS_OUTPUT=""
+
+for (( page = START_PAGE; page <= END_PAGE; page++ )); do
+  RECTANGLE=$(/usr/bin/osascript <<'APPLESCRIPT'
+tell application "System Events"
+    if not (exists process "Kindle") then error "Kindleが起動していません。"
+    tell process "Kindle"
+        set frontmost to true
+        if not (exists front window) then error "Kindleのウインドウがありません。"
+        set {windowX, windowY} to position of front window
+        set {windowWidth, windowHeight} to size of front window
+        return (windowX as text) & "," & (windowY as text) & "," & (windowWidth as text) & "," & (windowHeight as text)
+    end tell
+end tell
+APPLESCRIPT
+  ) || fail "Kindleを操作できません。WezTermのアクセシビリティ権限を確認してください。"
+
+  printf -v PAGE_TEXT '%04d' "$page"
+  OUTPUT_PATH="$OUTPUT_DIR/${FILE_PREFIX}_p${PAGE_TEXT}.png"
+  RAW_PATH=$(/usr/bin/mktemp -t kindle_page_capture_cli)
+
+  /usr/sbin/screencapture -x -o -R"$RECTANGLE" "$RAW_PATH" || \
+    fail "画面を保存できません。WezTermの画面収録権限を確認してください。"
+
+  if [[ "$CAPTURE_MODE" == "page" ]]; then
+    "$CROP_HELPER" "$RAW_PATH" "$OUTPUT_PATH" || fail "ページ領域の自動切り抜きに失敗しました。"
+  else
+    "$CROP_HELPER" "$RAW_PATH" "$OUTPUT_PATH" --titlebar-only || fail "上部バーの除外に失敗しました。"
+  fi
+  /bin/rm -f -- "$RAW_PATH"
+  RAW_PATH=""
+
+  [[ -s "$OUTPUT_PATH" ]] || fail "PNGの保存に失敗しました: $OUTPUT_PATH"
+
+  if [[ -n "$PREVIOUS_OUTPUT" ]] && /usr/bin/cmp -s -- "$PREVIOUS_OUTPUT" "$OUTPUT_PATH"; then
+    /bin/rm -f -- "$OUTPUT_PATH"
+    fail "前ページと同じ画像になりました。終端またはページ送り方向を確認してください。"
+  fi
+
+  print -- "[$(( page - START_PAGE + 1 ))/${CAPTURE_COUNT}] $OUTPUT_PATH"
+  PREVIOUS_OUTPUT="$OUTPUT_PATH"
+
+  if (( page < END_PAGE )); then
+    /usr/bin/osascript - "$KEY_CODE" <<'APPLESCRIPT' >/dev/null
+on run argv
+    tell application "System Events" to key code ((item 1 of argv) as integer)
+end run
+APPLESCRIPT
+    /bin/sleep "$PAGE_DELAY"
+  fi
+done
+
+trap - EXIT INT TERM
+print -- "完了: ${CAPTURE_COUNT}ページを保存しました。"
