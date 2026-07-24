@@ -31,10 +31,10 @@ cd ~/dotfiles
 
 ```
 
-Mac土台のセットアップにはKindle Capture CLIの導入も含まれます。単独で再導入する場合は次を実行します。
+Mac土台のセットアップにはReader Capture CLIの導入も含まれます。単独で再導入する場合は次を実行します。
 
 ```sh
-~/dotfiles/scripts/install-kindle-capture.sh
+~/dotfiles/scripts/install-reader-capture.sh
 ```
 
 #### Xcode CLT のダイアログが出た場合
@@ -150,22 +150,29 @@ stow 適用前に、衝突しやすい既存ファイル/ディレクトリが *
   - managed window layout（起動時の位置/サイズ）
   - `font_size`（`WEZTERM_FONT_SIZE`）
 
-### 6) Kindle Capture CLI
+### 6) Reader Capture CLI
 
-Amazon Kindleで通常表示されているページを、WezTermから指定範囲の連番PNGとして保存します。DRM解除やKindleファイルの抽出は行いません。
+Amazon Kindleアプリ、またはChrome上のLibry（Legend）ビューアで表示中のページを、指定範囲の連番PNGとして保存します（旧 `kindle-capture` と `legend-capture` を統合したツール）。DRM解除やファイル抽出は行いません。
+
+会話形式で、対象（Kindle / Legend）→ 開始/終了ページ → prefix → 保存先 → ページ送り方向、の順に入力します。
 
 ```sh
-kindle-capture 188 220
+reader_capture
 ```
 
-実行時にprefixと保存先を質問します。既定値は、ページ送り後1.3秒待機、右矢印、左右余白を残し、上部のKindleタイトルバーだけを除外する設定です。
+引数でまとめて指定することもできます。
 
-再現に必要なソースは`tools/kindle-capture/`、インストーラーは`scripts/install-kindle-capture.sh`にあります。インストーラーは各Mac上でSwift補助プログラムをビルドし、次を作成します。
+```sh
+reader_capture kindle 188 220
+reader_capture legend 14 20
+```
 
-- `~/Projects/PDF-tools/kindle_capture/`
-- `~/.local/bin/kindle-capture`
+再現に必要なソースは`tools/reader-capture/`、インストーラーは`scripts/install-reader-capture.sh`にあります。インストーラーは各Mac上で2つのSwift補助プログラム（`crop_black_borders` / `page_click`）をビルドし、次を作成します。
 
-初回のみ、macOSの「プライバシーとセキュリティ」でWezTermに「アクセシビリティ」と「画面収録」を許可してください。この権限自体はmacOSの仕様上dotfilesから自動付与できません。
+- `~/Projects/PDF-tools/reader_capture/`
+- `~/.local/bin/reader_capture`
+
+初回のみ、macOSの「プライバシーとセキュリティ」でWezTerm（実行するターミナル）に「アクセシビリティ」と「画面収録」を許可してください。Legend（Libry）を使う場合は追加で、「オートメーション」でGoogle Chromeの操作許可と、Chromeの「表示 > デベロッパ > Apple EventからのJavaScriptを許可」も必要です。これらの権限自体はmacOSの仕様上dotfilesから自動付与できません。
 
 ### 7) Neovim（headless）
 以下を headless で実行します:
