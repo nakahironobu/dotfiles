@@ -366,13 +366,14 @@ ensure_wezterm_cli() {
   warn "wezterm CLI not found; GUI may still work."
 }
 
-install_kindle_capture_cli() {
-  local installer="$DOTFILES_DIR/scripts/install-kindle-capture.sh"
+install_reader_capture_cli() {
+  # reader-capture は kindle-capture と legend-capture を統合した後継ツール。
+  local installer="$DOTFILES_DIR/scripts/install-reader-capture.sh"
   if [[ ! -x "$installer" ]]; then
-    warn "Kindle Capture installer not found or not executable: $installer"
+    warn "Reader Capture installer not found or not executable: $installer"
     return
   fi
-  log "Installing Kindle Capture CLI..."
+  log "Installing Reader Capture CLI..."
   "$installer"
 }
 
@@ -536,7 +537,7 @@ summary() {
   echo "iCloud cd aliases: icloud / desktop / ayumi / manami / sapix / seg / kono"
   echo "Unified Theme: Catppuccin Mocha (WezTerm / Neovim)"
   echo "WezTerm layout injected: right aligned, w=2/5, h=1/2, y slightly above center"
-  echo "Kindle Capture CLI: kindle-capture START_PAGE END_PAGE"
+  echo "Reader Capture CLI: reader_capture (kindle/legend統合・会話形式)"
   echo "font_size = ${WEZTERM_FONT_SIZE}"
   echo "========================================"
   echo
@@ -570,7 +571,7 @@ main() {
 
   install_meslo_fonts_if_needed
   ensure_wezterm_cli
-  install_kindle_capture_cli
+  install_reader_capture_cli
   patch_wezterm_lua_font_and_layout
 
   pin_treesitter_master_if_needed
