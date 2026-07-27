@@ -3,6 +3,22 @@ local act = wezterm.action
 
 local FONT_SIZE = 16.0
 
+-- ─── Color Palette ── Rosé Pine Moon ─────────────────────────────────────────
+-- 端末本体の配色（本文・ANSI16色）は組込みの color_scheme = "rose-pine-moon" に任せ、
+-- ここでは組込みが面倒を見ない「タブバー」と、後述の選択色だけを明示する。
+-- tmux(~/.config/tmux/tmux.conf の @thm_*) と nvim(rose-pine) も同じ公式パレット。
+-- 3つのうち1つだけ変えると境目に継ぎ目が出るので、変えるときは必ず3つ揃えること。
+local P = {
+  base    = "#232136", -- 背景
+  surface = "#2a273f",
+  overlay = "#393552", -- アクティブなタブの背景
+  muted   = "#6e6a86",
+  subtle  = "#908caa", -- 非アクティブの文字（base とのコントラスト 4.9:1）
+  text    = "#e0def4", -- 通常の文字
+  iris    = "#c4a7e7", -- アクセント
+  hl_med  = "#44415a", -- 選択範囲の背景
+}
+
 -- ─── Window Layout on Startup ────────────────────────────────────────────────
 wezterm.on("gui-startup", function(cmd)
   local tab, pane, window = wezterm.mux.spawn_window(cmd or {})
@@ -42,15 +58,15 @@ wezterm.on("format-tab-title", function(tab, tabs, panes, config, hover, max_wid
   end
   if tab.is_active then
     return {
-      { Background = { Color = "#313244" } },
-      { Foreground = { Color = "#cba6f7" } },
+      { Background = { Color = P.overlay } },
+      { Foreground = { Color = P.iris } },
       { Attribute = { Intensity = "Bold" } },
       { Text = " " .. display .. " " },
     }
   end
   return {
-    { Background = { Color = "#1e1e2e" } },
-    { Foreground = { Color = "#6c7086" } },
+    { Background = { Color = P.base } },
+    { Foreground = { Color = P.subtle } },
     { Text = " " .. display .. " " },
   }
 end)
@@ -71,7 +87,7 @@ return {
   font_size = FONT_SIZE,
 
   -- ─── Color ───────────────────────────────────────────────────────────────
-  color_scheme = "Catppuccin Mocha",
+  color_scheme = "rose-pine-moon",
 
   -- ─── Tab Bar ─────────────────────────────────────────────────────────────
   enable_tab_bar = true,
@@ -79,24 +95,29 @@ return {
   tab_bar_at_bottom = true,
   tab_max_width = 30,
   colors = {
+    -- 組込みの rose-pine-moon は selection_bg を背景と同じ #232136 で定義しており、
+    -- そのままだとマウス選択した範囲が見た目に一切変わらない（選択が不可視）。
+    -- 公式パレットの highlightMed に差し替えて選択が見えるようにする。
+    selection_bg = P.hl_med,
+    selection_fg = P.text,
     tab_bar = {
-      background = "#1e1e2e",
+      background = P.base,
       active_tab = {
-        bg_color = "#313244",
-        fg_color = "#cba6f7",
+        bg_color = P.overlay,
+        fg_color = P.iris,
         intensity = "Bold",
       },
       inactive_tab = {
-        bg_color = "#1e1e2e",
-        fg_color = "#6c7086",
+        bg_color = P.base,
+        fg_color = P.subtle,
       },
       inactive_tab_hover = {
-        bg_color = "#181825",
-        fg_color = "#a6adc8",
+        bg_color = P.surface,
+        fg_color = P.text,
       },
       new_tab = {
-        bg_color = "#1e1e2e",
-        fg_color = "#585b70",
+        bg_color = P.base,
+        fg_color = P.muted,
       },
     },
   },

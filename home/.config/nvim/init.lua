@@ -899,19 +899,23 @@ require('lazy').setup({
   },
 
   { -- You can easily change to a different colorscheme.
-    'catppuccin/nvim',
-    name = 'catppuccin',
+    -- Rosé Pine Moon。WezTerm(color_scheme = "rose-pine-moon") と
+    -- tmux(~/.config/tmux/tmux.conf の @thm_*) も同じ公式パレットに揃えてある。
+    -- 変えるときは3つまとめて変えること（1つだけだと境目に継ぎ目が出る）。
+    'rose-pine/neovim',
+    name = 'rose-pine',
     priority = 1000, -- Make sure to load this before all the other start plugins.
     config = function()
-      require('catppuccin').setup {
-        flavour = 'mocha',
+      require('rose-pine').setup {
+        variant = 'moon',
+        dark_variant = 'moon',
         styles = {
-          comments = {}, -- Disable italics in comments to match previous preference
+          italic = false, -- Disable italics to match previous preference
         },
       }
 
       -- Load the colorscheme here.
-      vim.cmd.colorscheme 'catppuccin-mocha'
+      vim.cmd.colorscheme 'rose-pine-moon'
     end,
   },
 
