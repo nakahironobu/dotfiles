@@ -28,13 +28,37 @@ from datetime import datetime
 HOME = os.path.expanduser("~")
 SYSREMINDER = re.compile(r"<system-reminder>.*?</system-reminder>", re.DOTALL)
 
+# 丸数字（①②…）→ [1] [2] … に正規化する。
+#
+# なぜ変換するか:
+#   - 一般的なフォントに入っている丸数字は ⑳(20) まで。㉑以降は環境によって豆腐(□)に
+#     なるので、項目が増えると番号付けそのものが破綻する＝持続可能でない。
+#   - 丸数字は字面が小さく、等幅フォントの中で視認性が落ちる。[12] のほうが桁数に
+#     関係なく読める。
+#   - 変換はレンダラ側でやる。会話本文（.jsonl）は原文のまま残り、md を作り直せば
+#     いつでも同じ結果になる（冪等）。
+#
+# 対象は実用される囲み数字レンジのみ。各タプルは (開始番号, 先頭コードポイント, 末尾)。
+CIRCLED_DIGITS = {}
+for _first, _lo, _hi in (
+    (1, 0x2460, 0x2473),   # ①..⑳
+    (0, 0x24EA, 0x24EA),   # ⓪
+    (21, 0x3251, 0x325F),  # ㉑..㉟
+    (36, 0x32B1, 0x32BF),  # ㊱..㊿
+    (1, 0x2776, 0x277F),   # ❶..❿（反転）
+    (1, 0x24F5, 0x24FE),   # ⓵..⓾（二重丸）
+):
+    for _offset, _cp in enumerate(range(_lo, _hi + 1)):
+        CIRCLED_DIGITS[_cp] = f"[{_first + _offset}]"
+
 
 def hhmm(ts):
     return ts[11:16] if isinstance(ts, str) and len(ts) >= 16 else ""
 
 
 def clean(text):
-    return SYSREMINDER.sub("〔システムリマインダー省略〕", text).strip()
+    text = SYSREMINDER.sub("〔システムリマインダー省略〕", text)
+    return text.translate(CIRCLED_DIGITS).strip()
 
 
 def oneline(s, n=90):
