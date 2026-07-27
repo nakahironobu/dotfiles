@@ -1,5 +1,6 @@
 {
   "permissions": {
+    "defaultMode": "auto",
     "allow": [
       "Bash(curl -s 'http://localhost:5001/api/filter-options')",
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); items = d['item_list']; [print\\(f'{i[\\\\\"chapter_num\\\\\"]} / {i[\\\\\"item_num\\\\\"]} / {i[\\\\\"item_title\\\\\"]}'\\) for i in items if '演習' in i['item_title']]\")",
@@ -97,5 +98,11 @@
   "tui": "fullscreen",
   "theme": "dark-ansi",
   "agentPushNotifEnabled": true,
-  "skipAutoPermissionPrompt": true
+  "skipAutoPermissionPrompt": true,
+  "statusLine": {
+    "type": "command",
+    "command": "~/.claude/statusline.sh",
+    "padding": 0,
+    "refreshInterval": 60
+  }
 }

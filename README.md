@@ -190,6 +190,8 @@ Claude Code の横断ルールと PDF 抽出ツールも dotfiles で共有す�
 - `~/.claude/CLAUDE.md` … グローバル指示（uv 統一・長時間プロセス禁止・Git/Drive 線引き 等）
 - `~/Projects/CLAUDE.md` … `~/Projects/` 配下の全プロジェクト共通（PDF→日本語抽出は NDL-OCR が一次／数式は AI、見開きページの扱い 等）
 - `~/.claude/settings.json` / `~/.claude/keybindings.json` … Claude Code 本体設定・キー割当（絶対パス／鍵／MCP 認証を含めないこと）
+- `~/.claude/statusline.sh` … 画面下部の常時表示（コンテキスト使用率 / 5h・7d レート制限と明ける日時 / 現在時刻）。`settings.json` の `statusLine` から呼ばれる。3本のバーは同じ幅なので、棒の長さをそのまま見比べられる
+- ※ `settings.json` の `permissions.defaultMode` は **`auto`**。`Ctrl-a W` の作業場は fzf で選んだ任意のフォルダで claude を起動するため、プロジェクト単位ではなくここ（全プロジェクト）で既定にしてある
 - `~/.claude/skills/`（自作スキル）、`~/.local/bin/ndlocr-lite`（NDL-OCR ラッパー）
 
 **管理しない（端末/セッション固有・秘匿）**
