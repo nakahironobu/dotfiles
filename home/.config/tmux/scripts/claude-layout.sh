@@ -27,7 +27,10 @@ fi
 
 # 新規ウィンドウ。最初の1ペイン = 「右上の claude」。pane id を明示保持して
 # 以降は -t で確実に対象ペインを指す（display-popup 経由でも active pane に依存しない）。
-claude_pane="$(tmux new-window -c "$PROJ" -n claude -P -F '#{pane_id}')"
+# ウィンドウ名は "claude-<プロジェクト名>"。作業場を複数開いたとき、ステータスバーの
+# 一覧が "2:claude 3:claude" だとどれがどの案件か判別できないため。
+# （-n を付けると tmux はそのウィンドウの automatic-rename を切るので、名前は固定される）
+claude_pane="$(tmux new-window -c "$PROJ" -n "claude-$(basename "$PROJ")" -P -F '#{pane_id}')"
 # 先に claude（毎回まっさらな新セッション）を起動しておく。
 #   こうすると、続く左ペインの claude-log.sh は「いま起動した現行セッション」を掴め、
 #   prefix + A の追記先（固定ログ）と必ず一致する。新規プロジェクトでも jsonl 生成を待てる。
