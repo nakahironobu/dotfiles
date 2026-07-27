@@ -189,12 +189,12 @@ Claude Code の横断ルールと PDF 抽出ツールも dotfiles で共有す�
 **管理する（`home/` に置き stow で symlink）**
 - `~/.claude/CLAUDE.md` … グローバル指示（uv 統一・長時間プロセス禁止・Git/Drive 線引き 等）
 - `~/Projects/CLAUDE.md` … `~/Projects/` 配下の全プロジェクト共通（PDF→日本語抽出は NDL-OCR が一次／数式は AI、見開きページの扱い 等）
-- `~/.claude/commands/`（自作コマンド）、`~/.local/bin/ndlocr-lite`（NDL-OCR ラッパー）
+- `~/.claude/settings.json` / `~/.claude/keybindings.json` … Claude Code 本体設定・キー割当（絶対パス／鍵／MCP 認証を含めないこと）
+- `~/.claude/skills/`（自作スキル）、`~/.local/bin/ndlocr-lite`（NDL-OCR ラッパー）
 
 **管理しない（端末/セッション固有・秘匿）**
 - `~/.claude/{sessions,cache,projects,tasks,history.jsonl,shell-snapshots}`（会話ログ・状態）
 - `~/.claude/settings.local.json`（端末専用）
-- `~/.claude/settings.json` は共有するなら中身（絶対パス／鍵／MCP 認証）を精査してから個別に追加
 
 ### NDL-OCR Lite（PDF 抽出の一次OCR・国立国会図書館の ONNX 軽量版）
 本体(約150M)＋ONNXモデル＋venv は **Git に入れず各PCで再構築**する:
