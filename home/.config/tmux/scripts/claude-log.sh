@@ -127,9 +127,23 @@ _tmp="${TMPDIR:-/tmp}"; _tmp="${_tmp%/}"
 NVIM_SOCK="$_tmp/claude-log-nvim-$(printf '%s' "$_pane" | tr -cd '0-9').sock"
 rm -f "$NVIM_SOCK"
 tmux set-option -w @claude_log_sock "$NVIM_SOCK" 2>/dev/null || true
+# ─── 外部から書き換わったログを取り込む ─────────────────────────────────────
+# autoread は「checktime が走ったとき」に初めてファイルを読み直す。つまり
+# checktime を起こす autocmd が発火しない限り、画面は永久に古いままになる。
+# 以前は CursorHold / FocusGained / BufEnter だけに頼っていて、これが穴だった:
+#   - CursorHold は updatetime ぶん無入力になった「1回だけ」発火し、次の入力が
+#     来るまで二度と鳴らない。放置されたペインは最初の1回で終わる。
+#   - FocusGained はそのペインに実際に移動しないと来ない。
+#   ところが左ペインは「claude ペインに居たまま横目で読む」ビューアなので、
+#   通常の使い方ではそのどれも発火しない。結果、prefix + A で追記しても、
+#   外部でファイルを書き換えても、左ペインだけが何時間も古い内容を映し続けた。
+# → 一定間隔で自分から checktime を打つタイマーを持たせる。
+#   modified のときは読み直さない（手編集を握り潰さない。W12 のモーダルも出さない）。
+#   vim.uv は nvim 0.10+。それ以前は vim.loop にフォールバックする。
 nvim -n --listen "$NVIM_SOCK" \
      -c 'set autoread' \
      -c 'autocmd CursorHold,CursorHoldI,FocusGained,BufEnter * silent! checktime' \
+     -c 'lua local uv = vim.uv or vim.loop; uv.new_timer():start(2000, 2000, vim.schedule_wrap(function() if not vim.bo.modified then vim.cmd("silent! checktime") end end))' \
      "$OUT"
 # nvim を閉じてもペインを残す
 exec "${SHELL:-/bin/zsh}"
