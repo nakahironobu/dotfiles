@@ -123,9 +123,9 @@ return {
     { key = "c", mods = "CMD", action = act.CopyTo("Clipboard") },
     { key = "v", mods = "CMD", action = act.PasteFrom("Clipboard") },
 
-    -- 改行: Shift+Return で改行文字(LF)を送る。
-    -- ターミナルは通常 Shift+Return を素の Return と区別せず送らないため、
-    -- ここで LF を送って Claude Code 等のプロンプトで改行できるようにする。
+    -- 改行: Shift+Return で改行文字(LF)を送る。Claude Code はこの LF を
+    -- プロンプト内の改行として扱う。以前は tmux の "C-j → ペイン移動" が
+    -- この LF を横取りしていたが、その Ctrl+hjkl ブロックを廃止したので衝突しない。
     { key = "Enter", mods = "SHIFT", action = act.SendString("\n") },
 
     -- フォントサイズ
