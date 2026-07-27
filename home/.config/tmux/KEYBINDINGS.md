@@ -80,6 +80,21 @@ claude の作業場は「tmux のウィンドウ」を1つの単位として増�
 | `Ctrl-a` → `z` | ペインのズームトグル（全画面 ⇔ 元に戻す）。**ズーム中はステータスバーに `Z` が出る** |
 | `Ctrl-a` → `H / J / K / L` | ペインサイズ変更（5単位・連打可） |
 
+### 画面構成が入れ替わったとき
+
+**`Ctrl-a` → `Space`** で標準レイアウト（左=会話ログ42% / 右上=claude / 右下=shell30%）に戻る。
+
+配置が化ける原因は tmux 既定のレイアウト操作キー。うち踏みやすい2つは差し替え済み。
+
+| キー | 既定の動作 | このハーネスでは |
+|---|---|---|
+| `Ctrl-a` → `Space` | `next-layout`（プリセットを順に切替） | **標準レイアウトに戻す**に差し替え |
+| `Ctrl-a` → `Alt+1`〜`5` | `select-layout`（even-horizontal 等） | **ウィンドウ切替**に差し替え（`Alt+1〜5` と同じ） |
+| `Ctrl-a` → `Ctrl-o` | `rotate-window`（ペインを回転） | 既定のまま（戻すのは `Ctrl-a → Space`） |
+
+`Alt+1`〜`5` はプレフィックス無しでウィンドウ切替なので、`Ctrl-a` を離し損ねると
+既定では `select-layout` が走って配置が壊れていた。これが差し替えの理由。
+
 ### ペインが突然消えたとき
 
 `Ctrl-a` のあとの押し間違いで起きる、**確認なしでペインが見えなくなる**操作は3つ。
@@ -146,6 +161,7 @@ claude の作業場は「tmux のウィンドウ」を1つの単位として増�
 | `claude-log.sh [PROJ] [--fresh\|--update]` | 会話ログを読みやすい md にして nvim で開く（左ペイン・`--listen` サーバ化）。`--update` で固定ログ末尾に追記（`Ctrl-a → A`）。`--fresh` で作り直し。 |
 | `claude-open-doc.sh` | `Ctrl-a → F` の md ピッカー。関連 md を fzf で選び左 nvim に `--remote` で開く。 |
 | `claude-keys.sh` | `Ctrl-a → ?` のキー一覧。`list-keys -N` を `◆` で「独自 / tmux 標準」に仕分けして fzf 表示。 |
+| `claude-relayout.sh [window]` | `Ctrl-a → Space`。崩れた配置を標準形に戻す（左42% / 右下30%）。会話ログと shell の位置も直す。 |
 | `render_transcript.py` | Claude の `.jsonl` 会話ログ → Markdown 整形（`claude-log.sh` が内部利用） |
 
 ---

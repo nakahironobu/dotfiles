@@ -30,9 +30,10 @@ body="$(
 
   困ったとき
   ────────────────────────────────────────────────
-    ペインが消えた → prefix + z (ズーム) をもう一度。ズーム中は status に Z が出る
-    ペインが飛んだ → prefix + ! (break-pane) は別ウィンドウへ移す。Alt+n / Alt+p で探す
-    画面が乱れた   → prefix + r で設定再読込
+    配置が入れ替わった → prefix + Space で標準レイアウトに戻す
+    ペインが消えた     → prefix + z (ズーム) をもう一度。ズーム中は status に Z が出る
+    ペインが飛んだ     → prefix + ! (break-pane) は別ウィンドウへ移す。Alt+n / Alt+p で探す
+    設定を変えた       → prefix + r で再読込
 EOS
   section "このハーネス独自（prefix = Ctrl-a のあとに押す）" "$(mine prefix)"
   section "このハーネス独自（prefix 不要・そのまま押す）"     "$(mine root)"
