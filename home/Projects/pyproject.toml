@@ -43,6 +43,7 @@ members = [
     "MATH/SEG",
     "MATH/SUNDAI-JITSURYOKU",
     "PDF-tools",
+    "EFSA",
 ]
 # 対象外: BenAI / rika / WORK_AI_RULE（Python 無し）
 # OCR ツール ~/tools/ndlocr-lite は workspace 外。共有 venv の python で src/ を直接実行する方針
