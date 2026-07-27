@@ -90,12 +90,12 @@
       "/private/tmp"
     ]
   },
-  "model": "opus[1m]",
   "enabledPlugins": {
     "vercel@claude-plugins-official": true
   },
   "effortLevel": "xhigh",
   "tui": "fullscreen",
   "theme": "dark-ansi",
+  "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true
 }
