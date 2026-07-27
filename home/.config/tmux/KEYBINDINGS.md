@@ -37,7 +37,7 @@ claude の作業場は「tmux のウィンドウ」を1つの単位として増�
 | `Ctrl-a` → `G` | Git ログ（グラフ表示・popup） |
 | `Ctrl-a` → `S` | セッション切替（fzf・popup） |
 | `Ctrl-a` → `r` | tmux 設定を再読込（`✓ Config reloaded`） |
-| `Ctrl-a` → `?` | **キーバインド一覧をポップアップ**（独自キーが上・fzf で絞り込み・`claude-keys.sh`） |
+| `Ctrl-a` → `?` / `q` | **キーバインド一覧をポップアップ**（独自キーが上・fzf で絞り込み・`claude-keys.sh`）。2キーとも同じ動作 |
 | `Ctrl-a` → `d` | デタッチ（tmux 標準） |
 
 > **キーを増やしたら `-N` を付ける。** `Ctrl-a → ?` の一覧は tmux の `list-keys -N` を情報源に
