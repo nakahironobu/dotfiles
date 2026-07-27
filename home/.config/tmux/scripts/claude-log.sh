@@ -117,7 +117,14 @@ fi
 # 左ペインの nvim を RPC サーバとして起動し、ソケットをこのウィンドウの変数に記録する。
 # これで prefix + F（claude-open-doc.sh）が --remote で「この nvim」に md を開ける
 # ＝履歴画面と同じ nvim・同じ設定（render-markdown 等）で閲覧・編集できる。
-NVIM_SOCK="${TMPDIR:-/tmp}/claude-log-nvim-$(tmux display -p '#{pane_id}' | tr -cd '0-9').sock"
+# ソケット名は「このスクリプトが動く左ペイン自身」の pane id で決める。
+#   tmux display -p '#{pane_id}'（-t 無し）は active pane を返すため、直後に
+#   claude-layout.sh が select-pane で claude ペインへ戻すと名前がズレる
+#   （左 nvim は %2 なのに socket が -1.sock になる等）。$TMUX_PANE は常に
+#   「今このプロセスがいるペイン」を指すので確実。TMPDIR 末尾の / も落とす。
+_pane="${TMUX_PANE:-$(tmux display -p '#{pane_id}')}"
+_tmp="${TMPDIR:-/tmp}"; _tmp="${_tmp%/}"
+NVIM_SOCK="$_tmp/claude-log-nvim-$(printf '%s' "$_pane" | tr -cd '0-9').sock"
 rm -f "$NVIM_SOCK"
 tmux set-option -w @claude_log_sock "$NVIM_SOCK" 2>/dev/null || true
 nvim -n --listen "$NVIM_SOCK" \
