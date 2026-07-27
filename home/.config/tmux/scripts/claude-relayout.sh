@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # tmux: 作業場のレイアウトを標準形に戻す。
-#   左 = 会話ログ(nvim・幅42%) / 右上 = claude / 右下 = shell(高さ30%)
+#   左 = 会話ログ(nvim・幅50%) / 右上 = claude / 右下 = shell(高さ47%)
 #   ＝ claude-layout.sh が新規作成するのと同じ比率。
 #
 # なぜ必要か:
@@ -44,11 +44,12 @@ if [ -n "${sh:-}" ] && [ "$sh" != "$last" ]; then
   tmux swap-pane -d -s "$W.$sh" -t "$W.$last"
 fi
 
-tmux set-window-option -t "$W" main-pane-width 42% >/dev/null
+tmux set-window-option -t "$W" main-pane-width 50% >/dev/null
 # select-layout の -t は「target-window」ではなく **target-pane**。"$W" だけ渡すと
 # 別ウィンドウの指定にならず、現在ウィンドウの pane $W と解釈されて別の窓が壊れる。
 # 必ず window.pane 形式で渡すこと。
 tmux select-layout -t "$W.$first" main-vertical >/dev/null
-[ "$n" -ge 3 ] && tmux resize-pane -t "$W.$last" -y 30%
+# 右下 shell は 47%＝上下 1:1 から claude 側へ2行寄せた値（claude-layout.sh と同じ）。
+[ "$n" -ge 3 ] && tmux resize-pane -t "$W.$last" -y 47%
 
 tmux display-message "✓ レイアウトを標準に戻しました（左=会話ログ / 右上=claude / 右下=shell）"

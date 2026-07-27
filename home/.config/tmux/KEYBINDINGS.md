@@ -34,6 +34,7 @@ claude の作業場は「tmux のウィンドウ」を1つの単位として増�
 | `Ctrl-a` → `W` | fzf でプロジェクトを選び、その作業場を作成（左=会話ログ / 右上=claude / 右下=shell）＋ WezTerm 窓を最大化 |
 | `Ctrl-a` → `A` | 現在の会話を固定ログ(md)に**追記**（Append・手編集は保持・nvim へ自動反映） |
 | `Ctrl-a` → `F` | 関連ドキュメント(md)を fzf で選び**左ペインの nvim で開く**（履歴と同じく閲覧・編集） |
+| `Ctrl-a` → `O` | **左の会話ログ(nvim)を開き直す**（`:q` して shell になった後・nvim 設定の反映に） |
 | `Ctrl-a` → `G` | Git ログ（グラフ表示・popup） |
 | `Ctrl-a` → `S` | セッション切替（fzf・popup） |
 | `Ctrl-a` → `r` | tmux 設定を再読込（`✓ Config reloaded`） |
@@ -82,7 +83,7 @@ claude の作業場は「tmux のウィンドウ」を1つの単位として増�
 
 ### 画面構成が入れ替わったとき
 
-**`Ctrl-a` → `Space`** で標準レイアウト（左=会話ログ42% / 右上=claude / 右下=shell30%）に戻る。
+**`Ctrl-a` → `Space`** で標準レイアウト（左=会話ログ50% / 右上=claude / 右下=shell47%）に戻る。
 
 配置が化ける原因は tmux 既定のレイアウト操作キー。うち踏みやすい2つは差し替え済み。
 
@@ -161,7 +162,8 @@ claude の作業場は「tmux のウィンドウ」を1つの単位として増�
 | `claude-log.sh [PROJ] [--fresh\|--update]` | 会話ログを読みやすい md にして nvim で開く（左ペイン・`--listen` サーバ化）。`--update` で固定ログ末尾に追記（`Ctrl-a → A`）。`--fresh` で作り直し。 |
 | `claude-open-doc.sh` | `Ctrl-a → F` の md ピッカー。関連 md を fzf で選び左 nvim に `--remote` で開く。 |
 | `claude-keys.sh` | `Ctrl-a → ?` のキー一覧。`list-keys -N` を `◆` で「独自 / tmux 標準」に仕分けして fzf 表示。 |
-| `claude-relayout.sh [window]` | `Ctrl-a → Space`。崩れた配置を標準形に戻す（左42% / 右下30%）。会話ログと shell の位置も直す。 |
+| `claude-relayout.sh [window]` | `Ctrl-a → Space`。崩れた配置を標準形に戻す（左50% / 右下47%）。会話ログと shell の位置も直す。 |
+| `claude-log-reopen.sh [window]` | `Ctrl-a → O`。左の会話ログペインを起動時と同じ引数で `respawn-pane` し直す。`:q` した後や nvim 設定の反映に。 |
 | `render_transcript.py` | Claude の `.jsonl` 会話ログ → Markdown 整形（`claude-log.sh` が内部利用） |
 
 ---

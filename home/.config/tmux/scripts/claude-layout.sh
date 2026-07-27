@@ -35,11 +35,14 @@ claude_pane="$(tmux new-window -c "$PROJ" -n "claude-$(basename "$PROJ")" -P -F 
 #   こうすると、続く左ペインの claude-log.sh は「いま起動した現行セッション」を掴め、
 #   prefix + A の追記先（固定ログ）と必ず一致する。新規プロジェクトでも jsonl 生成を待てる。
 tmux send-keys -t "$claude_pane" "claude" Enter
-# 左に会話ログ(nvim)を 42% 幅で切り出す（-b = 新ペインを左側に）。固定ログを開く。
-tmux split-window -h -b -l 42% -c "$PROJ" -t "$claude_pane" "$SDIR/claude-log.sh '$PROJ'"
-# 右下 = 作業 shell（claude ペインを縦分割・高さ 30%）。id を控える
+# 左に会話ログ(nvim)を 50% 幅で切り出す（-b = 新ペインを左側に）。固定ログを開く。
+tmux split-window -h -b -l 50% -c "$PROJ" -t "$claude_pane" "$SDIR/claude-log.sh '$PROJ'"
+# 右下 = 作業 shell（claude ペインを縦分割・高さ 47%）。id を控える
 #   （後で「最大化トリガ」をこの idle ペインの tty へ送る）。
-shell_pane="$(tmux split-window -v -l 30% -c "$PROJ" -t "$claude_pane" -P -F '#{pane_id}')"
+#   47% は「上下 1:1 から claude 側へ2行寄せた」値。claude は会話が縦に流れるので
+#   2行でも効きが大きく、shell 側は残り 30 行あれば実用上困らない。
+#   行数の直指定にしないのは、窓サイズが変わっても比率で追従させるため。
+shell_pane="$(tmux split-window -v -l 47% -c "$PROJ" -t "$claude_pane" -P -F '#{pane_id}')"
 # 右上（claude）にフォーカスを戻して終了
 tmux select-pane -t "$claude_pane"
 
