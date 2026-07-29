@@ -59,5 +59,33 @@ Python は終始一貫 `uv` を使う（詳細は `~/.claude/CLAUDE.md`）。外
   - shebang（明示起動するので実害なし）。
 - **新しい Python リポジトリ**は uv プロジェクト化（自前 `pyproject.toml`）か workspace member に追加してから `uv run` を使う（非プロジェクトのフォルダでは共有 venv を解決できない）。
 
+## 実行コマンドは `projcmd`（Ctrl-G）のカタログに載る書き方をする
+
+`~/Projects` 配下の「演習アプリ起動・Ubuntuへデプロイ・クロップ画面・PDF→OCR・M4へrsync」等の実行コマンドは、
+**`projcmd`（zsh で `Ctrl-G`）が全プロジェクトから自動収集して fzf で選ばせ、コマンドラインに書き出す**。
+実体は `~/.local/bin/projcmd`（dotfiles 管理）で、カタログは**保存すれば次回起動時に自動で作り直される**（手動なら `projcmd reindex`）。
+
+**新しいプロジェクトを足したとき／既存プロジェクトのコマンドを追加・変更したときは、下の書き方に合わせる**こと。
+合わせておけば登録作業は不要（自動で拾われる）。逆に、書き方を外すとカタログから消える＝「そのコマンドは無いもの」になる。
+
+- **ドキュメントに書く場合**（README.md / DEPLOY.md / CLAUDE.md、`docs/` 以下も可・深さ5階層まで）
+  - 言語指定を **` ```bash `**（または `sh` / `zsh` / `console`）にする。**` ```text ` のフェンスは拾われない**。
+  - **1行1コマンド**。説明は**行末 `# 説明`** か、**直前の行の `# 説明`**。無ければ直近の見出しが説明になる。
+  - 実行ディレクトリがプロジェクト直下でないなら、フェンスの先頭に `cd ~/Projects/<PROJ>/<sub>` を置く（以降その dir 扱いになり、選択時に `cd` が自動で前置される）。
+  - 穴埋めが要るものは `<画像ディレクトリ>` のように `<...>` で書く（一覧に ✎ が付き「埋めてから実行」と分かる）。
+- **シェルスクリプト**（`*.sh`）… 先頭のコメントに使い方を並べる。`#   ./deploy.sh setup        初回だけ：…` のように
+  **「スクリプト名＋引数」→ 空白2つ以上 → 説明**、または `# 説明` 形式。行ごとに 1 エントリになる。
+- **Python の画面もの**… `*_app.py` / `*_server.py` / `*_tool.py` / `crop_*.py` / `region_*.py` / `review_*.py` の命名にすると、
+  ドキュメントに無くても `uv run python <path>` として拾われる（説明は docstring か先頭コメントの1行目）。
+- **コンソールスクリプト**… `pyproject.toml` の `[project.scripts]` に書けば `uv run <name>` として載る。
+- **ドキュメントに書けない・プロジェクト横断の定番**（M1→M4 の rsync、サーバ疎通確認など）… `~/.config/projcmd/commands.toml` に
+  `[[command]]` を足す（dotfiles 管理＝M1/M4 共有）。ノイズを消したいときは同ファイル冒頭の `hide`（正規表現）に足す。
+- **タグ**は内容から自動推定（`app deploy ubuntu m4 sync crop ocr pdf build check setup danger`）。
+  日本語（演習アプリ／デプロイ／クロップ／同期…）でも引けるので、**説明は日本語で書いてよい**。
+
+**確認のしかた:** `projcmd list -p <プロジェクト名>` に出れば OK。タグ別は `projcmd list -t deploy`、全文検索は `projcmd list -g <正規表現>`。
+**Claude への指示:** 配下プロジェクトでコマンドを新設・変更したら、この書き方に沿っているかを確認し、必要なら `commands.toml` も更新して、
+`projcmd list -p <プロジェクト名>` で載ったことを確かめてから作業を終えること。
+
 ## 用語：「leader＋キー」＝ tmux プレフィックス（Ctrl+a）
 配下プロジェクトの会話で「leader F」「leader ○」と書いたら、**tmux のプレフィックスキーを押してから ○ を押す**操作を指す。この環境では tmux プレフィックスをデフォルトの `Ctrl+b` から **`Ctrl+a`** に変更済みなので、「leader F」＝ `Ctrl+a` に続けて `F`。「leader」＝ tmux の leader（＝プレフィックス＝ `Ctrl+a`）の意。

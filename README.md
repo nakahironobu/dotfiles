@@ -207,6 +207,25 @@ NDLOCR_SRC=/path/to/ndlocr-lite ./scripts/install-ndlocr-lite.sh
 ```
 使い方: `ndlocr-lite <画像|ディレクトリ> <出力dir>`（CPU・GPU 不要）。役割分担（日本語＝NDL一次・数式＝AI）は `~/Projects/CLAUDE.md` 参照。
 
+### projcmd（`Ctrl-G`）— ~/Projects 横断のコマンドランチャ
+
+各プロジェクトに散らばった実行コマンド（演習アプリ起動 / Ubuntu へデプロイ / クロップ画面 / PDF→OCR / M4 へ rsync …）を
+横断で集めて **fzf で絞り込み、選んだものを *実行せず* コマンドラインに書き出す**（確認・編集してから Enter）。
+
+```sh
+# zsh: Ctrl-G  → 一覧 → 絞り込み → Enter でコマンドラインへ（Tab で複数選択、&& で連結）
+projcmd                 # 同じピッカーを直接起動
+projcmd list            # カタログを一覧表示（-p プロジェクト / -t タグ / -g 正規表現）
+projcmd tags            # タグとプロジェクトの件数
+projcmd reindex         # 手動で作り直す（通常は保存すれば自動で追従する）
+```
+
+- 収集元: `~/Projects/**` の md コードフェンス(```bash)・`*.sh` のヘッダ使い方・`pyproject.toml` の `[project.scripts]`・
+  `*_app.py` 等の画面もの・Claude memory・手書きの `~/.config/projcmd/commands.toml`。
+- 実体は `home/.local/bin/projcmd`（uv script）、手書きカタログは `home/.config/projcmd/commands.toml`、キー割当は `home/.zshrc`。
+- **カタログに載る書き方のルールは `~/Projects/CLAUDE.md` に定めてある**（新規プロジェクト追加時はそれに従えば自動で載る）。
+- 一覧の印: `✎` = `<...>` を埋めてから実行 / `!` = 破壊的（`--delete`・`reset` 等）/ `@` = サーバ側で実行する手順。
+
 ---
 
 ## dotfiles を更新したとき（既存Mac / 新Mac 共通）

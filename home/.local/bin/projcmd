@@ -1,0 +1,894 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
+"""projcmd — ~/Projects 配下に散らばった「実行コマンド」を横断カタログ化して選ぶ。
+
+各プロジェクトの README/DEPLOY/CLAUDE.md 等のコードフェンス、`*.sh` のヘッダ usage、
+`pyproject.toml` の `[project.scripts]`、Claude memory、手書きの commands.toml から
+コマンドを集めてキャッシュし、fzf で絞り込んで 1 行のシェルコマンドとして書き出す。
+
+  projcmd                 # fzf で対話選択 → 選んだコマンドを stdout へ（実行はしない）
+  projcmd list            # カタログを一覧表示
+  projcmd list -t deploy  # タグで絞る（-p でプロジェクト、-g で全文検索）
+  projcmd tags            # タグ一覧（件数つき）
+  projcmd reindex         # キャッシュを作り直す
+  projcmd preview <id>    # 1件の詳細（fzf のプレビュー用）
+
+zsh からは Ctrl-G のウィジェット経由で使う（選択結果がコマンドラインに載る）。
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import shlex
+import subprocess
+import sys
+import tomllib
+from dataclasses import dataclass, field, asdict
+from pathlib import Path
+
+HOME = Path.home()
+PROJECTS = Path(os.environ.get("PROJCMD_ROOT", HOME / "Projects"))
+CLAUDE_PROJECTS = Path(os.environ.get("PROJCMD_MEMORY_ROOT", HOME / ".claude" / "projects"))
+CONFIG = Path(os.environ.get("PROJCMD_CONFIG", HOME / ".config" / "projcmd" / "commands.toml"))
+CACHE = Path(os.environ.get("XDG_CACHE_HOME", HOME / ".cache")) / "projcmd" / "index.json"
+
+# 走査から外すディレクトリ名（データ・生成物・巨大画像・外部 vendor）
+SKIP_DIRS = {
+    ".git", ".venv", "venv", "node_modules", "__pycache__", ".mypy_cache", ".pytest_cache",
+    ".ruff_cache", ".work", "vendor", "site-packages", ".DS_Store", ".ipynb_checkpoints",
+    "pictures", "outputs", "output", "pdfs", "media", "raw_scans", "input", "static",
+    "templates", "_archive", "_rescue", "_to_delete", "egg-info", ".egg-info", "dist",
+    ".eggs", ".cache", "logs",
+}
+MAX_DEPTH = 5                      # ~/Projects からの相対深さ
+SHELL_LANGS = {"bash", "sh", "zsh", "shell", "console", "shell-session", "sh-session", "shellsession"}
+DOC_SUFFIXES = {".md", ".markdown"}
+
+# タグ付けルール: (タグ, 検索用の別名, 正規表現)。別名は fzf で日本語からも引けるように表示する。
+TAG_RULES: list[tuple[str, str, str]] = [
+    ("app",    "演習アプリ 起動 サーバ",  r"uvicorn|--reload|--port|\b\w*app\.py\b|_server\.py|\bserve\b|127\.0\.0\.1|localhost:|http://"),
+    ("deploy", "デプロイ 本番反映",       r"deploy\.sh|systemctl|journalctl|/etc/systemd|gunicorn|\.service\b|daemon-reload"),
+    ("ubuntu", "サーバ ubuntu",           r"\bssh +(-\S+ +)*(sapix|hiro@)|\bsapix:|192\.168\.10\.134|/opt/legend"),
+    ("m4",     "M4 別マシン",             r"(^|[^a-zA-Z0-9_.-])m4([^a-zA-Z0-9_.-]|$)|192\.168\.10\.112"),
+    ("sync",   "同期 転送 rsync",         r"\brsync\b|sync_data|scp |git (pull|push|clone)"),
+    ("crop",   "クロップ 図 切り出し",     r"crop|region_app|review_tool|autocrop|figure|figures|detect_fig"),
+    ("ocr",    "OCR 文字起こし",          r"ndlocr|\bocr\b|yomitoku|tesseract|latex.?ocr|run_ocr"),
+    ("pdf",    "PDF 抽出",                r"\.pdf\b|pdf_to_images|pdf2image|pdftools|batch_extract|extract_pages|split_pages|extract/|pdf_to|_pages\.py"),
+    ("build",  "生成 DB 構築",            r"build_|build/|--reimport|--write|\.db\b|sqlite|tests_data|content\.py|structure\.py"),
+    ("check",  "確認 検証 テスト",         r"validate|--check|--dry-run|\bstatus\b|pytest|\btest\b|--report|health"),
+    ("setup",  "初期設定 導入",           r"uv venv|uv pip install|uv sync|brew install|pip install|cp \.env|mkdir -p"),
+    ("danger", "危険 破壊的",             r"\brm +-rf?\b|--delete\b|reset-progress|\bkill\b|DROP TABLE|shutdown|sudo rm"),
+]
+# 一覧の並び順（若いほど上）。よく使う操作を上に出す。
+TAG_ORDER = ["app", "crop", "ocr", "pdf", "build", "deploy", "sync", "m4", "ubuntu", "check", "setup", "danger"]
+
+# ドキュメントに無くても拾う「画面もの」の Python エントリポイント
+APP_PY_RE = re.compile(r"(app|.*_app|.*_server|.*_tool|crop_.*|region_.*|review_.*)\.py")
+
+# コマンド行として採らないもの
+NOISE_RE = re.compile(
+    r"^(fi|done|else|elif|then|do|esac|shift|exit|return|EOF|\}|\)|\{|;;|\||&&|#)\b"
+    r"|^[\}\)\]]"
+    r"|[├└│┌┐┘─]"                     # ディレクトリツリー図
+    r"|^\s*$"
+)
+# 行頭がコマンドらしいか（変数代入・パス・関数呼び出しを許す）
+LOOKS_CMD_RE = re.compile(r"^[A-Za-z0-9_./~$\"'\\-]")
+PLACEHOLDER_RE = re.compile(r"<[^<>]{1,40}>|\.\.\.|…|\bxxx\b|\bYOUR\b|＜")
+
+
+@dataclass
+class Entry:
+    id: str = ""
+    cmd: str = ""
+    desc: str = ""
+    project: str = ""
+    dir: str = ""
+    tags: list[str] = field(default_factory=list)
+    kind: str = "doc"              # doc | script | entrypoint | memory | curated
+    src: str = ""                  # path:line
+    section: str = ""              # 直近の markdown 見出し
+    remote: bool = False           # ローカルに無い作業ディレクトリ（サーバ上での手順）
+    template: bool = False         # <...> 等の穴埋めが要る
+
+    def search_blob(self) -> str:
+        return " ".join([self.cmd, self.desc, self.project, self.section, " ".join(self.tags)])
+
+
+# ---------------------------------------------------------------- 走査
+
+
+def _scan_tree(root: Path, max_depth: int, out: list[tuple[str, int, int]]) -> None:
+    """scandir の 1 パスでファイルと mtime/size を集める（stat を二度打たない）。"""
+    stack: list[tuple[str, int]] = [(str(root), 0)]
+    while stack:
+        d, depth = stack.pop()
+        try:
+            with os.scandir(d) as it:
+                for ent in it:
+                    name = ent.name
+                    try:
+                        # symlink 先（Google Drive 等）へは絶対に降りない
+                        if ent.is_dir(follow_symlinks=False):
+                            if depth + 1 <= max_depth and name not in SKIP_DIRS and not name.startswith("."):
+                                stack.append((ent.path, depth + 1))
+                            continue
+                        if not ent.is_file(follow_symlinks=False):
+                            continue
+                        low = name.lower()
+                        if not (low.endswith(".md") or low.endswith(".markdown")
+                                or low.endswith(".sh") or name == "pyproject.toml"
+                                or (low.endswith(".py") and APP_PY_RE.fullmatch(low))):
+                            continue
+                        st = ent.stat(follow_symlinks=False)
+                        out.append((ent.path, st.st_mtime_ns, st.st_size))
+                    except OSError:
+                        continue
+        except OSError:
+            continue
+
+
+def scan_files() -> list[tuple[str, int, int]]:
+    """~/Projects 配下の md / sh / pyproject.toml と、Claude memory の md を集める。"""
+    out: list[tuple[str, int, int]] = []
+    if PROJECTS.is_dir():
+        _scan_tree(PROJECTS, MAX_DEPTH, out)
+    if CLAUDE_PROJECTS.is_dir():
+        for d in CLAUDE_PROJECTS.glob("-Users-hironobu-Projects-*/memory"):
+            _scan_tree(d, 0, out)
+    out.sort()
+    return out
+
+
+def signature(files: list[tuple[str, int, int]]) -> str:
+    try:
+        cfg_mtime = CONFIG.stat().st_mtime_ns
+    except OSError:
+        cfg_mtime = 0
+    blob = f"{CONFIG}:{cfg_mtime}\n" + "\n".join(f"{p}:{m}:{s}" for p, m, s in files)
+    return str(hash(blob))
+
+
+PROJECT_MARKERS = (".git", "README.md", "pyproject.toml", "CLAUDE.md", "package.json")
+
+
+def is_project_root(p: Path) -> bool:
+    return any((p / m).exists() for m in PROJECT_MARKERS)
+
+
+def memory_slug_to_project(slug: str) -> tuple[str, Path]:
+    """`MATH-SEG` のような memory のスラッグを ~/Projects の実ディレクトリへ戻す。"""
+    if (PROJECTS / slug).is_dir():
+        return slug, PROJECTS / slug
+    parts = slug.split("-")
+    for i in range(1, len(parts)):
+        cand = PROJECTS / "/".join(["-".join(parts[:i]), "-".join(parts[i:])])
+        if cand.is_dir():
+            return str(cand.relative_to(PROJECTS)), cand
+    return slug, PROJECTS
+
+
+def project_of(path: Path) -> tuple[str, Path]:
+    """ファイルの属するプロジェクト名と、その作業ディレクトリを返す。
+
+    MATH/SEG のように「束ねフォルダ＋実プロジェクト」の 2 階層になっている場合は
+    深いほうを 1 プロジェクトとして扱う（cd 先も実プロジェクト側にする）。
+    """
+    if str(path).startswith(str(CLAUDE_PROJECTS)):
+        for parent in path.parents:
+            if parent.name.startswith("-Users-hironobu-Projects-"):
+                return memory_slug_to_project(parent.name.removeprefix("-Users-hironobu-Projects-"))
+        return "memory", PROJECTS
+    try:
+        rel = path.relative_to(PROJECTS)
+    except ValueError:
+        return path.parent.name, path.parent
+    if len(rel.parts) == 1:                       # ~/Projects 直下の CLAUDE.md 等
+        return "(共通)", PROJECTS
+    top = PROJECTS / rel.parts[0]
+    if len(rel.parts) > 2 and not is_project_root(top) and is_project_root(top / rel.parts[1]):
+        return f"{rel.parts[0]}/{rel.parts[1]}", top / rel.parts[1]
+    return rel.parts[0], top
+
+
+# ---------------------------------------------------------------- 解析ヘルパ
+
+
+def strip_trailing_comment(line: str) -> tuple[str, str]:
+    """`cmd  # 説明` を (cmd, 説明) に割る。引用符の中の # は無視する。"""
+    out, quote = [], ""
+    i = 0
+    while i < len(line):
+        ch = line[i]
+        if quote:
+            if ch == quote:
+                quote = ""
+            elif ch == "\\" and quote == '"':
+                out.append(ch)
+                i += 1
+                if i < len(line):
+                    out.append(line[i])
+                    i += 1
+                continue
+        elif ch in "\"'":
+            quote = ch
+        elif ch == "#" and (not out or out[-1].isspace()):
+            return "".join(out).strip(), line[i + 1:].strip()
+        out.append(ch)
+        i += 1
+    return line.strip(), ""
+
+
+def tags_for(cmd: str, desc: str, section: str) -> list[str]:
+    blob = f"{cmd} {desc} {section}"
+    found = [tag for tag, _alias, pat in TAG_RULES if re.search(pat, blob, re.IGNORECASE)]
+    return sorted(set(found), key=lambda t: TAG_ORDER.index(t) if t in TAG_ORDER else 99)
+
+
+def normalize(cmd: str) -> str:
+    return re.sub(r"\s+", " ", cmd).strip()
+
+
+def resolve_cd(target: str, cur: Path, proj_dir: Path) -> Path | None:
+    target = target.strip().strip("\"'")
+    if not target or target.startswith("-") or PLACEHOLDER_RE.search(target):
+        return None
+    p = Path(os.path.expandvars(target)).expanduser()
+    if not p.is_absolute():
+        p = (cur / p).resolve() if cur else (proj_dir / p)
+    return p
+
+
+def add_entry(entries: list[Entry], e: Entry, seen: set[tuple[str, str]]) -> None:
+    key = (normalize(e.cmd), e.dir)
+    if key in seen:
+        return
+    if len(e.cmd) > 400:
+        return
+    seen.add(key)
+    e.id = str(len(entries))
+    entries.append(e)
+
+
+# ---------------------------------------------------------------- markdown
+
+
+def parse_markdown(path: Path, entries: list[Entry], seen: set[tuple[str, str]], kind: str) -> None:
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return
+    project, proj_dir = project_of(path)
+    lines = text.splitlines()
+    heading = ""
+    in_fence = False
+    fence_lang = ""
+    fence_marker = ""
+    cwd: Path | None = None
+    pending_desc = ""
+    buf = ""
+    buf_line = 0
+
+    def flush(cmd_line: str, lineno: int) -> None:
+        nonlocal cwd, pending_desc
+        raw = cmd_line.strip()
+        if raw.startswith("$ ") or raw.startswith("% "):
+            raw = raw[2:].strip()
+        if not raw:
+            pending_desc = ""
+            return
+        if raw.lstrip().startswith("#"):
+            pending_desc = raw.lstrip("# ").strip()
+            return
+        if NOISE_RE.search(raw) or not LOOKS_CMD_RE.match(raw):
+            return
+        if raw.startswith(("http://", "https://")):   # 説明中の URL はコマンドではない
+            return
+        cmd, trailing = strip_trailing_comment(raw)
+        if not cmd:
+            return
+        # 冒頭の cd はディレクトリ文脈として吸収し、単独では登録しない
+        m = re.match(r"^cd\s+([^\s&;|]+)\s*(?:&&\s*(.*))?$", cmd)
+        if m:
+            new = resolve_cd(m.group(1), cwd or proj_dir, proj_dir)
+            if new:
+                cwd = new
+            rest = (m.group(2) or "").strip()
+            if not rest:
+                return
+            cmd = rest
+        desc = trailing or pending_desc or heading
+        pending_desc = ""
+        workdir = cwd or proj_dir
+        remote = not workdir.exists()
+        e = Entry(
+            cmd=cmd,
+            desc=desc.strip(),
+            project=project,
+            dir=str(proj_dir if remote else workdir),
+            tags=tags_for(cmd, desc, heading),
+            kind=kind,
+            src=f"{path}:{lineno}",
+            section=heading,
+            remote=remote,
+            template=bool(PLACEHOLDER_RE.search(cmd)),
+        )
+        if remote and "ubuntu" not in e.tags:
+            e.tags.append("remote")
+        add_entry(entries, e, seen)
+
+    for i, line in enumerate(lines, 1):
+        fence = re.match(r"^\s*(```+|~~~+)\s*([A-Za-z0-9_+-]*)", line)
+        if fence and (not in_fence or line.strip().startswith(fence_marker)):
+            if not in_fence:
+                in_fence, fence_lang, fence_marker = True, fence.group(2).lower(), fence.group(1)
+                cwd = None
+                pending_desc = ""
+                buf = ""
+                continue
+            if fence.group(2) == "":
+                in_fence, fence_lang, buf = False, "", ""
+                continue
+        if not in_fence:
+            h = re.match(r"^(#{1,4})\s+(.*)", line)
+            if h:
+                heading = h.group(2).strip().strip("#").strip()
+            continue
+        if fence_lang not in SHELL_LANGS:
+            continue
+        stripped = line.rstrip()
+        if buf:
+            buf = buf[:-1].rstrip() + " " + stripped.strip()
+        else:
+            buf, buf_line = stripped, i
+        if buf.rstrip().endswith("\\"):
+            continue
+        flush(buf, buf_line)
+        buf = ""
+
+
+# ---------------------------------------------------------------- shell script
+
+
+def parse_shell_script(path: Path, entries: list[Entry], seen: set[tuple[str, str]]) -> None:
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return
+    project, proj_dir = project_of(path)
+    try:
+        rel = path.relative_to(proj_dir)
+    except ValueError:
+        rel = Path(path.name)
+    invoke = f"./{rel}" if not str(rel).startswith("/") else str(rel)
+    base = path.name
+
+    header: list[tuple[int, str]] = []
+    for i, line in enumerate(lines, 1):
+        if i == 1 and line.startswith("#!"):
+            continue
+        if line.startswith("#"):
+            header.append((i, line.lstrip("#").strip()))
+            continue
+        if line.strip() == "":
+            if header:
+                break
+            continue
+        break
+
+    summary = ""
+    usage_added = False
+    for lineno, text in header:
+        if not text:
+            continue
+        # 「使い方:」ブロック等で自分自身を呼んでいる行はそのままコマンドとして採る
+        if base in text and not text.startswith("使い方") and not text.lower().startswith("usage"):
+            cmd, trailing = strip_trailing_comment(text)
+            cmd = cmd.strip()
+            if not trailing:
+                # `./deploy.sh content      内容だけ反映` のように空白で説明が続く書き方
+                m_sp = re.match(r"^(\S+(?:\s\S+)*?)\s{3,}(\S.*)$", cmd)
+                if not m_sp:
+                    # 空白2つ区切りは、続きが日本語（非ASCII）のときだけ説明とみなす
+                    m2 = re.match(r"^(\S+(?:\s\S+)*?)\s{2}(\S.*)$", cmd)
+                    if m2 and re.search(r"[^\x00-\x7f]", m2.group(2)):
+                        m_sp = m2
+                if m_sp:
+                    cmd, trailing = m_sp.group(1).strip(), m_sp.group(2).strip()
+            if cmd and (cmd.startswith(base) or ("/" + base) in cmd.split()[0]):
+                cmd = re.sub(r"^\S*" + re.escape(base), invoke, cmd, count=1)
+                add_entry(entries, Entry(
+                    cmd=cmd,
+                    desc=trailing or summary,
+                    project=project,
+                    dir=str(proj_dir),
+                    tags=tags_for(cmd, trailing or summary, summary),
+                    kind="script",
+                    src=f"{path}:{lineno}",
+                    section="使い方",
+                    template=bool(PLACEHOLDER_RE.search(cmd)),
+                ), seen)
+                usage_added = True
+                continue
+        if not summary and not text.startswith("#"):
+            summary = text
+    if not usage_added:
+        add_entry(entries, Entry(
+            cmd=invoke,
+            desc=summary or f"{base} を実行",
+            project=project,
+            dir=str(proj_dir),
+            tags=tags_for(invoke, summary, ""),
+            kind="script",
+            src=f"{path}:1",
+            section="スクリプト",
+        ), seen)
+
+
+def parse_app_script(path: Path, entries: list[Entry], seen: set[tuple[str, str]]) -> None:
+    """`crop_app.py` / `practice_server.py` 等、ドキュメントに無い画面ものを拾う。"""
+    project, proj_dir = project_of(path)
+    try:
+        rel = path.relative_to(proj_dir)
+    except ValueError:
+        return
+    cmd = f"uv run python {rel}"
+    if any(normalize(e.cmd).startswith(cmd) for e in entries):
+        return                                     # ドキュメント側で既に拾えている
+    desc = ""
+    try:
+        head = path.read_text(encoding="utf-8", errors="replace").split("\n", 40)[:40]
+    except OSError:
+        head = []
+    for i, line in enumerate(head):
+        s = line.strip()
+        if s.startswith(('"""', "'''")):
+            body = s.strip("\"'").strip()
+            desc = body or (head[i + 1].strip() if i + 1 < len(head) else "")
+            break
+        if s.startswith("#") and not s.startswith("#!") and "coding" not in s and "-*-" not in s:
+            desc = s.lstrip("# ").strip()
+            break
+    add_entry(entries, Entry(
+        cmd=cmd,
+        desc=desc or f"{rel} を起動",
+        project=project,
+        dir=str(proj_dir),
+        tags=sorted(set(tags_for(cmd, desc, "") + ["app"]),
+                    key=lambda t: TAG_ORDER.index(t) if t in TAG_ORDER else 99),
+        kind="script",
+        src=f"{path}:1",
+        section="スクリプト（自動検出）",
+    ), seen)
+
+
+# ---------------------------------------------------------------- pyproject
+
+
+def parse_pyproject(path: Path, entries: list[Entry], seen: set[tuple[str, str]]) -> None:
+    try:
+        data = tomllib.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return
+    scripts = (data.get("project") or {}).get("scripts") or {}
+    if not scripts:
+        return
+    project, proj_dir = project_of(path)
+    desc = (data.get("project") or {}).get("description") or ""
+    for name, target in scripts.items():
+        cmd = f"uv run {name}"
+        add_entry(entries, Entry(
+            cmd=cmd,
+            desc=desc or f"コンソールスクリプト {name} → {target}",
+            project=project,
+            dir=str(path.parent),
+            tags=sorted(set(tags_for(cmd, f"{desc} {target}", "") + ["app"]),
+                        key=lambda t: TAG_ORDER.index(t) if t in TAG_ORDER else 99),
+            kind="entrypoint",
+            src=f"{path}:1",
+            section="[project.scripts]",
+        ), seen)
+
+
+# ---------------------------------------------------------------- curated
+
+
+def load_config() -> dict:
+    if not CONFIG.exists():
+        return {}
+    try:
+        return tomllib.loads(CONFIG.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        print(f"projcmd: {CONFIG} を読めません: {exc}", file=sys.stderr)
+        return {}
+
+
+def parse_curated(cfg: dict, entries: list[Entry], seen: set[tuple[str, str]]) -> None:
+    try:
+        cfg_lines = CONFIG.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        cfg_lines = []
+
+    def line_of(cmd: str) -> int:
+        needle = cmd.strip().split("\n")[0][:30]
+        for i, line in enumerate(cfg_lines, 1):
+            if needle and needle in line:
+                return i
+        return 1
+
+    for item in cfg.get("command", []):
+        cmd = str(item.get("cmd", "")).strip()
+        if not cmd:
+            continue
+        project = str(item.get("project", "(共通)"))
+        raw_dir = item.get("dir")
+        workdir = Path(os.path.expandvars(str(raw_dir))).expanduser() if raw_dir else (PROJECTS / project)
+        if not workdir.exists():
+            workdir = PROJECTS if not (PROJECTS / project).exists() else PROJECTS / project
+        desc = str(item.get("desc", ""))
+        tags = list(item.get("tags", [])) or tags_for(cmd, desc, "")
+        add_entry(entries, Entry(
+            cmd=cmd,
+            desc=desc,
+            project=project,
+            dir=str(workdir),
+            tags=sorted(set(tags), key=lambda t: TAG_ORDER.index(t) if t in TAG_ORDER else 99),
+            kind="curated",
+            src=f"{CONFIG}:{line_of(cmd)}",
+            section="commands.toml",
+            template=bool(PLACEHOLDER_RE.search(cmd)),
+        ), seen)
+
+
+# ---------------------------------------------------------------- index
+
+
+def build_index(files: list[tuple[str, int, int]] | None = None) -> dict:
+    files = scan_files() if files is None else files
+    entries: list[Entry] = []
+    seen: set[tuple[str, str]] = set()
+    cfg = load_config()
+    parse_curated(cfg, entries, seen)                  # 手書きを最優先で確保
+    claude_root = str(CLAUDE_PROJECTS)
+    for path_str, _mtime, _size in files:
+        p = Path(path_str)
+        if p.suffix.lower() in DOC_SUFFIXES:
+            kind = "memory" if path_str.startswith(claude_root) else "doc"
+            parse_markdown(p, entries, seen, kind)
+        elif p.suffix == ".sh":
+            parse_shell_script(p, entries, seen)
+        elif p.name == "pyproject.toml":
+            parse_pyproject(p, entries, seen)
+    # ドキュメントで拾えなかったぶんだけ、*_app.py 等を後追いで補う
+    for path_str, _mtime, _size in files:
+        if path_str.endswith(".py"):
+            parse_app_script(Path(path_str), entries, seen)
+
+    hide = [re.compile(pat) for pat in cfg.get("hide", [])]
+    kept = [e for e in entries
+            if e.kind == "curated" or not any(h.search(e.cmd) for h in hide)]
+
+    kind_rank = {"curated": 0, "entrypoint": 1, "script": 2, "doc": 3, "memory": 4}
+
+    def sort_key(e: Entry):
+        tag_rank = min((TAG_ORDER.index(t) for t in e.tags if t in TAG_ORDER), default=99)
+        # 手書き（(共通)）を先頭に、以降はプロジェクトごとにまとめ、よく使う操作から並べる
+        return (0 if e.kind == "curated" else 1, e.project.lower(),
+                tag_rank, kind_rank.get(e.kind, 9), e.cmd.lower())
+
+    kept.sort(key=sort_key)
+    for i, e in enumerate(kept):
+        e.id = str(i)
+    return {
+        "signature": signature(files),
+        "files": len(files),
+        "entries": [asdict(e) for e in kept],
+    }
+
+
+def read_cache() -> dict | None:
+    try:
+        return json.loads(CACHE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def write_cache(index: dict) -> None:
+    CACHE.parent.mkdir(parents=True, exist_ok=True)
+    CACHE.write_text(json.dumps(index, ensure_ascii=False), encoding="utf-8")
+
+
+def load_index(force: bool = False, validate: bool = True) -> dict:
+    cached = None if force else read_cache()
+    if cached and not validate:
+        return cached
+    files = scan_files()
+    if cached and cached.get("signature") == signature(files):
+        return cached
+    index = build_index(files)
+    write_cache(index)
+    return index
+
+
+def entries_of(index: dict) -> list[Entry]:
+    return [Entry(**d) for d in index["entries"]]
+
+
+# ---------------------------------------------------------------- 表示
+
+
+C = {
+    "reset": "\033[0m", "dim": "\033[2m", "cyan": "\033[36m", "yellow": "\033[33m",
+    "green": "\033[32m", "red": "\033[31m", "bold": "\033[1m", "grey": "\033[90m",
+}
+
+
+def width(s: str) -> int:
+    """全角を 2 桁として数える。"""
+    import unicodedata
+    return sum(2 if unicodedata.east_asian_width(ch) in "WF" else 1 for ch in s)
+
+
+def pad(s: str, n: int) -> str:
+    w = width(s)
+    if w > n:
+        out = ""
+        for ch in s:
+            if width(out + ch) > n - 1:
+                return out + "…"
+            out += ch
+    return s + " " * (n - w)
+
+
+def tag_alias(tag: str) -> str:
+    for name, alias, _ in TAG_RULES:
+        if name == tag:
+            return alias
+    return ""
+
+
+def display_line(e: Entry, color: bool = True) -> str:
+    marks = ""
+    if e.template:
+        marks += "✎"
+    if "danger" in e.tags:
+        marks += "!"
+    if e.remote:
+        marks += "@"
+    tags = " ".join(e.tags)
+    alias = " ".join(dict.fromkeys(w for t in e.tags for w in tag_alias(t).split()))
+    desc = e.desc.replace("\n", " ")
+    if color:
+        return (f"{C['cyan']}{pad(e.project, 16)}{C['reset']}"
+                f"{C['yellow']}{pad(marks, 3)}{C['reset']}"
+                f"{pad(e.cmd, 62)}  "
+                f"{C['dim']}{desc}{C['reset']}  "
+                f"{C['grey']}[{tags} {alias}]{C['reset']}")
+    return f"{pad(e.project, 16)}{pad(marks, 3)}{pad(e.cmd, 62)}  {desc}  [{tags}]"
+
+
+def cd_target(d: str) -> str:
+    """cd に渡す文字列。ホーム配下は ~ 表記にし、空白等があればその部分だけ quote する。"""
+    home = str(HOME)
+    if d == home:
+        return "~"
+    if d.startswith(home + "/"):
+        rest = d[len(home) + 1:]
+        return "~/" + (shlex.quote(rest) if shlex.quote(rest) != rest else rest)
+    return shlex.quote(d)
+
+
+def compose(selected: list[Entry], pwd: str | None) -> str:
+    """選ばれた行を、そのまま実行できる 1 行に組み立てる。"""
+    parts: list[str] = []
+    cur = os.path.realpath(pwd) if pwd else None
+    for e in selected:
+        d = os.path.realpath(e.dir) if e.dir else None
+        if d and d != cur and Path(d).is_dir():
+            parts.append(f"cd {cd_target(e.dir)} && {e.cmd}")
+            cur = d
+        else:
+            parts.append(e.cmd)
+    return " && ".join(parts)
+
+
+# ---------------------------------------------------------------- サブコマンド
+
+
+def cmd_pick(args) -> int:
+    index = load_index(force=args.reindex)
+    entries = entries_of(index)
+    entries = filter_entries(entries, args)
+    if not entries:
+        print("projcmd: 該当するコマンドがありません", file=sys.stderr)
+        return 1
+    if os.environ.get("PROJCMD_NO_FZF"):          # fzf を使わずに一覧だけ出す（デバッグ用）
+        print("\n".join(display_line(e, color=False) for e in entries))
+        return 0
+
+    me = str(Path(__file__).resolve())
+    py = shlex.quote(sys.executable)
+    preview = f"{py} {shlex.quote(me)} preview {{1}}"
+    lines = "\n".join(f"{e.id}\t{display_line(e)}" for e in entries)
+    fzf = [
+        "fzf", "--ansi", "--multi", "--delimiter=\t", "--with-nth=2..",
+        "--height=80%", "--layout=reverse", "--border", "--info=inline",
+        "--prompt=projcmd> ", "--marker=+",
+        f"--header=Enter:コマンドラインへ  Tab:複数選択(&&で連結)  {len(entries)}件  ✎=要編集 !=破壊的 @=サーバ上",
+        "--preview", preview, "--preview-window=down,45%,wrap,border-top",
+        "--bind=ctrl-/:toggle-preview,ctrl-r:reload(" + f"{py} {shlex.quote(me)} lines --reindex" + ")",
+    ]
+    if args.query:
+        fzf += ["--query", args.query]
+    try:
+        proc = subprocess.run(fzf, input=lines, text=True, capture_output=True)
+    except FileNotFoundError:
+        print("projcmd: fzf が見つかりません（brew install fzf）", file=sys.stderr)
+        return 127
+    if proc.returncode not in (0, 1, 130) and proc.stderr.strip():
+        print(f"projcmd: fzf: {proc.stderr.strip()}", file=sys.stderr)
+    if proc.returncode != 0 or not proc.stdout.strip():
+        return 130
+    chosen_ids = [ln.split("\t", 1)[0] for ln in proc.stdout.splitlines() if ln.strip()]
+    by_id = {e.id: e for e in entries}
+    chosen = [by_id[i] for i in chosen_ids if i in by_id]
+    line = compose(chosen, args.pwd)
+    print(line)
+    return 0
+
+
+def cmd_lines(args) -> int:
+    """fzf の reload 用（id\\t表示行 を吐くだけ）。"""
+    entries = filter_entries(entries_of(load_index(force=args.reindex)), args)
+    print("\n".join(f"{e.id}\t{display_line(e)}" for e in entries))
+    return 0
+
+
+def filter_entries(entries: list[Entry], args) -> list[Entry]:
+    out = entries
+    if getattr(args, "project", None):
+        pat = args.project.lower()
+        out = [e for e in out if pat in e.project.lower()]
+    if getattr(args, "tag", None):
+        want = {t.strip().lower() for t in args.tag.split(",") if t.strip()}
+        out = [e for e in out if want & set(e.tags)]
+    if getattr(args, "grep", None):
+        pat = re.compile(args.grep, re.IGNORECASE)
+        out = [e for e in out if pat.search(e.search_blob())]
+    return out
+
+
+def cmd_list(args) -> int:
+    entries = filter_entries(entries_of(load_index(force=args.reindex)), args)
+    color = sys.stdout.isatty()
+    current = None
+    for e in entries:
+        if e.project != current:
+            current = e.project
+            head = f"── {current} ──"
+            print(f"\n{C['bold']}{head}{C['reset']}" if color else f"\n{head}")
+        print(display_line(e, color=color))
+    print(f"\n{len(entries)} 件" if not color else f"\n{C['dim']}{len(entries)} 件{C['reset']}")
+    return 0
+
+
+def cmd_tags(args) -> int:
+    entries = entries_of(load_index(force=args.reindex))
+    counts: dict[str, int] = {}
+    for e in entries:
+        for t in e.tags:
+            counts[t] = counts.get(t, 0) + 1
+    for t in sorted(counts, key=lambda t: (TAG_ORDER.index(t) if t in TAG_ORDER else 99, t)):
+        print(f"{pad(t, 10)}{counts[t]:>4}  {tag_alias(t)}")
+    projects: dict[str, int] = {}
+    for e in entries:
+        projects[e.project] = projects.get(e.project, 0) + 1
+    print("\n-- プロジェクト --")
+    for p in sorted(projects, key=lambda p: -projects[p]):
+        print(f"{pad(p, 22)}{projects[p]:>4}")
+    return 0
+
+
+def cmd_preview(args) -> int:
+    # fzf から 1 キーごとに呼ばれるので、走査せずキャッシュだけを読む
+    entries = {e.id: e for e in entries_of(load_index(validate=False))}
+    e = entries.get(args.id)
+    if not e:
+        return 1
+    print(f"{C['bold']}{e.cmd}{C['reset']}")
+    print()
+    if e.desc:
+        print(f"  {e.desc}")
+    print(f"  {C['dim']}project{C['reset']} {e.project}    "
+          f"{C['dim']}dir{C['reset']} {e.dir.replace(str(HOME), '~')}")
+    print(f"  {C['dim']}tags{C['reset']}    {' '.join(e.tags) or '-'}    "
+          f"{C['dim']}kind{C['reset']} {e.kind}")
+    if e.section:
+        print(f"  {C['dim']}見出し{C['reset']}  {e.section}")
+    if e.template:
+        print(f"  {C['yellow']}✎ <...> を埋めてから実行{C['reset']}")
+    if e.remote:
+        print(f"  {C['yellow']}@ サーバ側で実行する手順（ローカルに作業dirが無い）{C['reset']}")
+    if "danger" in e.tags:
+        print(f"  {C['red']}! 破壊的な操作を含む（--delete / rm / reset 等）{C['reset']}")
+    path_str, _, lineno = e.src.rpartition(":")
+    print(f"  {C['dim']}出典{C['reset']}    {path_str.replace(str(HOME), '~')}:{lineno}")
+    try:
+        n = int(lineno)
+        src_lines = Path(path_str).read_text(encoding="utf-8", errors="replace").splitlines()
+        lo, hi = max(0, n - 6), min(len(src_lines), n + 6)
+        print()
+        for i in range(lo, hi):
+            mark = "▶" if i + 1 == n else " "
+            body = src_lines[i]
+            color = C["reset"] if i + 1 == n else C["dim"]
+            print(f"  {mark} {color}{body}{C['reset']}")
+    except (OSError, ValueError):
+        pass
+    return 0
+
+
+def cmd_reindex(args) -> int:
+    index = build_index()
+    write_cache(index)
+    print(f"projcmd: {len(index['entries'])} 件のコマンドを {index['files']} ファイルから収集 "
+          f"→ {CACHE.parent}/index.json")
+    return 0
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(prog="projcmd", description="~/Projects のコマンドを横断カタログ化して選ぶ")
+    ap.add_argument("-r", "--reindex", action="store_true", help="キャッシュを無視して作り直す")
+    sub = ap.add_subparsers(dest="sub")
+
+    def add_filters(p):
+        p.add_argument("-p", "--project", help="プロジェクト名で絞る（部分一致）")
+        p.add_argument("-t", "--tag", help="タグで絞る（カンマ区切り: app,deploy,ocr,crop,pdf,sync,m4…）")
+        p.add_argument("-g", "--grep", help="正規表現で全文検索")
+        p.add_argument("-r", "--reindex", action="store_true", help="キャッシュを作り直す")
+
+    p_pick = sub.add_parser("pick", help="fzf で選ぶ（既定）")
+    add_filters(p_pick)
+    p_pick.add_argument("-q", "--query", help="fzf の初期クエリ")
+    p_pick.add_argument("--pwd", help="呼び出し元のカレントディレクトリ（cd の要否判定に使う）")
+    p_pick.add_argument("--force-tty", action="store_true")
+    p_pick.set_defaults(func=cmd_pick)
+
+    p_lines = sub.add_parser("lines", help="fzf 用の行を出す（内部用）")
+    add_filters(p_lines)
+    p_lines.set_defaults(func=cmd_lines)
+
+    p_list = sub.add_parser("list", help="カタログを一覧表示")
+    add_filters(p_list)
+    p_list.set_defaults(func=cmd_list)
+
+    p_tags = sub.add_parser("tags", help="タグとプロジェクトの一覧")
+    p_tags.add_argument("-r", "--reindex", action="store_true")
+    p_tags.set_defaults(func=cmd_tags)
+
+    p_prev = sub.add_parser("preview", help="1件の詳細（fzf プレビュー用）")
+    p_prev.add_argument("id")
+    p_prev.set_defaults(func=cmd_preview)
+
+    p_re = sub.add_parser("reindex", help="キャッシュを作り直す")
+    p_re.set_defaults(func=cmd_reindex)
+
+    args = ap.parse_args()
+    if not getattr(args, "func", None):
+        args = ap.parse_args(["pick"] + (["--reindex"] if args.reindex else []))
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        sys.exit(130)
+    except BrokenPipeError:
+        sys.exit(0)

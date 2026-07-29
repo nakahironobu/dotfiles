@@ -1,0 +1,114 @@
+# projcmd の手書きカタログ（dotfiles 管理・M1/M4 で共有）
+#
+# ここに書いたコマンドは自動抽出より先に、一覧の先頭へ出る。
+#   - ドキュメントに書きにくい常用コマンド（マシン間 rsync など）
+#   - 抽出はできるが「これが正解」と決めておきたい定番
+# を置く。ドキュメント（README/DEPLOY/CLAUDE.md のコードフェンス）に書けるものは
+# そちらに書けば自動で拾われるので、ここに二重登録しないこと。
+#
+# 書式:
+#   [[command]]
+#   project = "表示するプロジェクト名"   # 省略時 "(共通)"
+#   desc    = "一覧に出る説明"
+#   cmd     = "実行するコマンド"
+#   dir     = "~/Projects/XXX"          # 省略時 ~/Projects/<project>
+#   tags    = ["sync", "m4"]            # 省略時は cmd から自動推定
+#
+# タグ: app deploy ubuntu m4 sync crop ocr pdf build check setup danger
+# 反映: 保存すると次回起動時に自動で作り直される（手動なら projcmd reindex）。
+# `<...>` を含むコマンドは一覧で ✎ が付き、「埋めてから実行する雛形」として扱われる。
+
+# ---------------------------------------------------------------- 除外ルール
+# 自動抽出のノイズを落とす正規表現（cmd に対して search）。ここに書いたものは一覧に出ない。
+# ※ TOML の仕様上、この hide は [[command]] より前に置くこと（後ろに置くと直前の
+#   [[command]] の中に入ってしまい、除外が効かなくなる）。
+hide = [
+  "^git (clone|pull|push|status|add|commit) ",
+  "^brew install ",
+  "^curl -LsSf https://astral\\.sh/uv",
+  "^(sudo )?(nano|vi|vim|cat|less|ls|pwd|echo|touch|open|cp|mv) ",
+  "^cp \\.env\\.example",
+  "^source ",
+  "^\\. \\.venv/bin/activate",
+  "^python3?(\\.[0-9]+)? -m venv",
+  "^pip install",
+  "^export ",
+  "^ln -s ",
+  "^mkdir -p ",
+  "^sudo (mkdir|chown|systemctl daemon-reload)",
+  "^ssh-(keygen|copy-id)",
+  "^ping ",
+  "^uv cache clean",
+  "^sshpass ",          # パスワードが平文で載るので一覧には出さない
+]
+
+# ---------------------------------------------------------------- M1 ⇄ M4
+# M4 = Mac mini M4 (192.168.10.112, ~/.ssh/config の Host m4)。重い OCR/抽出は M4 が 2〜3 倍速い。
+# macOS 同梱の rsync は openrsync なので --info=stats2 等は使えない（--stats を使う）。
+
+[[command]]
+project = "(共通)"
+desc = "プロジェクト一式を M1 → M4 へ送る（.venv/.git/生成物は除外・進捗DBは送らない）"
+cmd = """rsync -a --exclude .venv/ --exclude .git/ --exclude __pycache__/ --exclude '*.pyc' --exclude .DS_Store --exclude vendor/ --exclude 'data/progress.db' --exclude '*/.work/' ~/Projects/<PROJ>/ m4:~/Projects/<PROJ>/"""
+dir = "~/Projects"
+tags = ["sync", "m4"]
+
+[[command]]
+project = "(共通)"
+desc = "送る前に中身だけ確認する（--dry-run。転送はしない）"
+cmd = """rsync -an --stats --exclude .venv/ --exclude .git/ --exclude __pycache__/ --exclude .DS_Store ~/Projects/<PROJ>/ m4:~/Projects/<PROJ>/"""
+dir = "~/Projects"
+tags = ["sync", "m4", "check"]
+
+[[command]]
+project = "(共通)"
+desc = "M4 での成果物を M1 へ回収する（逆向き rsync・--delete は付けない）"
+cmd = "rsync -a m4:~/Projects/<PROJ>/<出力dir>/ ~/Projects/<PROJ>/<出力dir>/"
+dir = "~/Projects"
+tags = ["sync", "m4"]
+
+[[command]]
+project = "(共通)"
+desc = "M4 で重いジョブを起動（PATH 明示・caffeinate でスリープ抑止・nohup で切断後も継続）"
+cmd = """ssh -n m4 'cd ~/Projects/<PROJ> && export PATH=$HOME/.local/bin:/opt/homebrew/bin:$PATH && nohup caffeinate -i uv run python <script.py> > run.log 2>&1 < /dev/null & echo "起動 PID=$!"'"""
+dir = "~/Projects"
+tags = ["m4", "app"]
+
+[[command]]
+project = "(共通)"
+desc = "M4 のジョブのログを追う / 生存確認する"
+cmd = "ssh m4 'tail -n 40 ~/Projects/<PROJ>/run.log; pgrep -fl uv | head'"
+dir = "~/Projects"
+tags = ["m4", "check"]
+
+[[command]]
+project = "(共通)"
+desc = "M4 へ疎通確認（電源・ネット・sshd が生きているか）"
+cmd = "ssh -o BatchMode=yes -o ConnectTimeout=8 m4 'hostname; uptime'"
+dir = "~/Projects"
+tags = ["m4", "check"]
+
+# ---------------------------------------------------------------- OCR（共通ツール）
+
+[[command]]
+project = "(共通)"
+desc = "日本語平文の一次OCR（NDL-OCR Lite・CPUで約1秒/枚）。数式・記号は AI 側で補う"
+cmd = "ndlocr-lite <画像ファイル|画像ディレクトリ> <出力ディレクトリ>"
+dir = "~/Projects"
+tags = ["ocr", "pdf"]
+
+# ---------------------------------------------------------------- Ubuntu 演習サーバ
+
+[[command]]
+project = "(共通)"
+desc = "Ubuntu 演習サーバ（sapix = 192.168.10.134）へログイン"
+cmd = "ssh sapix"
+dir = "~/Projects"
+tags = ["ubuntu", "deploy"]
+
+[[command]]
+project = "(共通)"
+desc = "サーバ上のサービスの状態をまとめて見る（coreplus / english / legend）"
+cmd = "ssh sapix 'systemctl --no-pager --lines=0 status coreplus english legend | head -40'"
+dir = "~/Projects"
+tags = ["ubuntu", "deploy", "check"]

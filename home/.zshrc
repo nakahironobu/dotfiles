@@ -96,3 +96,21 @@ alias google-my='cd "/Users/hironobu/Library/CloudStorage/GoogleDrive-hironobu@n
 
 # tmux Claude ワークスペース用スクリプト (cc-workspace.sh 等)
 export PATH="$HOME/.config/tmux/scripts:$PATH"
+
+# ---- projcmd: ~/Projects 横断コマンドランチャ（Ctrl-G）----
+# 各プロジェクトの README/DEPLOY/CLAUDE.md・*.sh・pyproject・memory から
+# 「演習アプリ起動／Ubuntuデプロイ／クロップ画面／PDF-OCR／M4へrsync」等を集めて
+# fzf で絞り込み、選んだものを *実行せず* コマンドラインに書き出す（確認・編集してから Enter）。
+#   Tab で複数選択 → && で連結 / Ctrl-R で再スキャン / 一覧は `projcmd list`
+projcmd-widget() {
+  local out
+  out="$(projcmd pick --pwd "$PWD" < /dev/tty)" || { zle reset-prompt; return 0 }
+  [[ -z "$out" ]] && { zle reset-prompt; return 0 }
+  BUFFER="$out"
+  CURSOR=${#BUFFER}
+  zle reset-prompt
+}
+zle -N projcmd-widget
+bindkey '^g' projcmd-widget
+bindkey -M viins '^g' projcmd-widget
+bindkey -M vicmd '^g' projcmd-widget
