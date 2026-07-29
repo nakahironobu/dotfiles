@@ -45,6 +45,7 @@ SKIP_DIRS = {
     "pictures", "outputs", "output", "pdfs", "media", "raw_scans", "input", "static",
     "templates", "_archive", "_rescue", "_to_delete", "egg-info", ".egg-info", "dist",
     ".eggs", ".cache", "logs",
+    "reference",                   # 外部ドキュメントの生成ミラー（Herdr/reference 等）
 }
 MAX_DEPTH = 5                      # ~/Projects からの相対深さ
 SHELL_LANGS = {"bash", "sh", "zsh", "shell", "console", "shell-session", "sh-session", "shellsession"}
