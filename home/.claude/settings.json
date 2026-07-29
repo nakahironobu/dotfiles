@@ -104,5 +104,19 @@
     "command": "~/.claude/statusline.sh",
     "padding": 0,
     "refreshInterval": 60
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "bash '/Users/hironobu/.claude/hooks/herdr-agent-state.sh' session",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ]
   }
 }
