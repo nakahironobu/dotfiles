@@ -355,14 +355,24 @@ install_meslo_fonts_if_needed() {
 }
 
 ensure_wezterm_cli() {
-  if need_cmd wezterm; then log "wezterm CLI OK: $(command -v wezterm)"; return; fi
-  local app="/Applications/WezTerm.app/Contents/MacOS/wezterm"
-  if [[ -x "$app" ]]; then
+  # wezterm 本体は gui / mux-server を「自分と同じディレクトリ」から探して exec する。
+  # そのため wezterm だけを symlink すると `wezterm start` や `wezterm show-keys` が
+  #   failed to exec "~/.local/bin/wezterm-gui": NotFound
+  # で落ちる。隣に並ぶ実行ファイルもまとめて張る（既存 symlink は上書きで是正）。
+  local macos="/Applications/WezTerm.app/Contents/MacOS"
+  if [[ -d "$macos" ]]; then
     mkdir -p "$HOME/.local/bin"
-    ln -sf "$app" "$HOME/.local/bin/wezterm"
-    log "wezterm CLI linked to ~/.local/bin/wezterm"
+    local b linked=()
+    for b in wezterm wezterm-gui wezterm-mux-server; do
+      if [[ -x "$macos/$b" ]]; then
+        ln -sf "$macos/$b" "$HOME/.local/bin/$b"
+        linked+=("$b")
+      fi
+    done
+    log "wezterm CLI linked to ~/.local/bin: ${linked[*]:-none}"
     return
   fi
+  if need_cmd wezterm; then log "wezterm CLI OK: $(command -v wezterm)"; return; fi
   warn "wezterm CLI not found; GUI may still work."
 }
 
