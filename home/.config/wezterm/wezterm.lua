@@ -36,14 +36,39 @@ wezterm.on("gui-startup", function(cmd)
   gui:set_inner_size(inner_w, inner_h)
 end)
 
--- ─── Maximize on demand (tmux 内のスクリプトから発火) ────────────────────────
--- tmux の中からは外側の WezTerm 窓を直接操作できないため、スクリプト側で
--- user-var `WEZTERM_MAXIMIZE` を立て（OSC 1337 / tmux passthrough 経由）、
--- ここで受けて窓を最大化する。値は使わず、名前一致だけ見る。
--- 使用箇所: ~/.config/tmux/scripts/claude-layout.sh（Ctrl-a → W）
+-- ─── Maximize / Fullscreen on demand (中で動くアプリから発火) ────────────────
+-- tmux や herdr の中からは外側の WezTerm 窓を直接操作できないため、内側から
+-- user-var を立て（OSC 1337 SetUserVar / tmux passthrough 経由）、ここで受ける。
+-- 値は使わず名前一致だけ見る（値は nonce。同じ値だとイベントが発火しないため）。
+--   WEZTERM_MAXIMIZE            窓を最大化する
+--                               発火元: ~/.config/tmux/scripts/claude-layout.sh（Ctrl-a → W）
+--   WEZTERM_FULLSCREEN          窓をフルスクリーンにする
+--   WEZTERM_FULLSCREEN_RESTORE  ↑で入れたフルスクリーンを解除して元の窓に戻す
+--                               発火元: ~/.zshrc の herdr ラッパ（TUI の開始/終了）
+-- フルスクリーンは set 系の API が無く toggle しかないので、いまの状態を見て
+-- 目的と違うときだけ切り替える（二度押しで裏返らないように）。
+-- 「自分が入れたのか」は wezterm.GLOBAL に窓ごとに記録する。ローカル変数だと
+-- config 保存＝リロードのたびに消えて復帰できないが、GLOBAL は跨いで残る。
+-- 手でフルスクリーンにしていた窓には記録が無いので、herdr を閉じても解除しない。
 wezterm.on("user-var-changed", function(window, pane, name, value)
-  if name == "WEZTERM_MAXIMIZE" and window then
+  if window == nil then
+    return
+  end
+  local key = "fullscreen_entered_by_app_" .. tostring(window:window_id())
+  if name == "WEZTERM_MAXIMIZE" then
     window:maximize()
+  elseif name == "WEZTERM_FULLSCREEN" then
+    if not window:get_dimensions().is_full_screen then
+      window:toggle_fullscreen()
+      wezterm.GLOBAL[key] = true
+    end
+  elseif name == "WEZTERM_FULLSCREEN_RESTORE" then
+    if wezterm.GLOBAL[key] then
+      wezterm.GLOBAL[key] = false
+      if window:get_dimensions().is_full_screen then
+        window:toggle_fullscreen()
+      end
+    end
   end
 end)
 
