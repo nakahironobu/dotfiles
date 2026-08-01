@@ -995,6 +995,17 @@ require('lazy').setup({
     ft = { 'markdown' }, -- markdown を開いたときだけ有効化
     opts = {
       -- カーソルがある行だけ生の markdown に戻り、その場で編集できる（既定でON）。
+      heading = {
+        -- 見出しアイコンを出さない。既定は { '󰲡 ', '󰲣 ', '󰲥 ', '󰲧 ', '󰲩 ', '󰲫 ' } で、
+        -- これは Nerd Font の Material Design アイコン＝「数字1〜6を丸/角で囲んだ字形」。
+        -- H1〜H6 のレベルを丸数字で示す意図だが、①②③ に見えるため
+        -- 「丸数字を使わない」方針（~/Projects/CLAUDE.md）と見た目が衝突する。
+        -- 空テーブルにすると icons[level] が nil になりアイコンを描かない。
+        icons = {},
+        -- 行番号の左（サイン列）に出る 󰫎 も同じ装飾なので併せて消す。
+        -- 見出しの背景色によるハイライト自体は残るので、見出しの識別性は落ちない。
+        sign = false,
+      },
       pipe_table = {
         preset = 'round', -- 表の角を丸い罫線に（'heavy' / 'double' も可）
         cell = 'trimmed', -- セルの余白を詰めて表の横幅を抑える
