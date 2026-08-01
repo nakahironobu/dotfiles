@@ -101,14 +101,14 @@ tags = ["ocr", "pdf"]
 
 [[command]]
 project = "(共通)"
-desc = "Ubuntu 演習サーバ（sapix = 192.168.10.134）へログイン"
-cmd = "ssh sapix"
+desc = "Ubuntu 演習サーバ（ubuntu = 192.168.10.134）へログイン"
+cmd = "ssh ubuntu"
 dir = "~/Projects"
 tags = ["ubuntu", "deploy"]
 
 [[command]]
 project = "(共通)"
 desc = "サーバ上のサービスの状態をまとめて見る（coreplus / english / legend）"
-cmd = "ssh sapix 'systemctl --no-pager --lines=0 status coreplus english legend | head -40'"
+cmd = "ssh ubuntu 'systemctl --no-pager --lines=0 status coreplus english legend | head -40'"
 dir = "~/Projects"
 tags = ["ubuntu", "deploy", "check"]
