@@ -1,0 +1,27 @@
+#!/bin/bash
+# interleave — 片面スキャナの表PDF＋裏PDF を1冊に結合する（プロジェクト横断・共通）
+# 実体: ~/Projects/PDF-tools （uv workspace member・pdftools/interleave_cli.py）
+# 使い方: interleave <front.pdf> <back.pdf> [out.pdf]
+#   表は先頭から、裏は末尾から撮ったものとして 表・裏・表・裏… に並べ直す。
+#   出力を省くと front の -front を外した名前（book-front.pdf → book.pdf）。
+#   結合後にプレビューで開き、元の2ファイルを削除するか確認する。
+#   裏が上下逆さまなら --rotate-back 180 / 確認を省くなら --keep・--no-preview
+set -e
+
+# 共有 env（~/Projects は uv workspace・Python3.14）に入っていればそれを直接使う。
+# 未導入のマシンでは PDF-tools を直に走らせる（dotfiles 共有先の未セットアップ対策）。
+SHARED="$HOME/Projects/.venv/bin/interleave"
+PROJECT="$HOME/Projects/PDF-tools"
+
+if [ -x "$SHARED" ]; then
+  exec "$SHARED" "$@"
+fi
+
+if [ -d "$PROJECT" ] && command -v uv >/dev/null 2>&1; then
+  exec uv run --project "$PROJECT" interleave "$@"
+fi
+
+echo "[ERR] interleave の実体が見つかりません。" >&2
+echo "      1) git clone git@github.com:nakahironobu/pdf-tools.git ~/Projects/PDF-tools" >&2
+echo "      2) uv pip install --python ~/Projects/.venv/bin/python -e ~/Projects/PDF-tools --no-deps" >&2
+exit 1
