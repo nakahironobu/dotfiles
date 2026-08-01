@@ -7,6 +7,13 @@ export PATH="$HOME/.local/bin:$PATH"
 export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
 export XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 
+# ---- 既定エディタ ----
+# 未設定だと「外部エディタで開く」系（Claude Code の ctrl+x ctrl+e、git commit 等）が
+# macOS の open にフォールバックし、public.html の既定ハンドラである Chrome が
+# 起動してしまう。端末内で完結させるため明示する。
+export EDITOR="nvim"
+export VISUAL="nvim"
+
 # ---- Antidote ----
 source "$XDG_DATA_HOME/antidote/antidote.zsh"
 
