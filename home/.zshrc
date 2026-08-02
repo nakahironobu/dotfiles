@@ -36,8 +36,31 @@ compinit -C
 zstyle ':completion:*' menu select
 zstyle ':completion:*' matcher-list 'm:{a-z}={A-Za-z}'
 
-# To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
-[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+# ---- ペインのリサイズ直後に残るプロンプトのゴミを掃除する ----
+# herdr はワークスペースのペインを暫定サイズで起動してから本来の幅にリサイズする
+# （実測: cols=122 で spawn → 直後に 243 へ。~/.config/herdr/herdr-server.log の
+# "pane.spawn.start" と "client resize" を突き合わせると追える）。
+# この間に描かれたプロンプトは古い幅で折り返されたまま端末のグリッドに残り、
+# 幅が広がった瞬間に折り返しが解けて「同じプロンプトが階段状に何個も並ぶ」表示になる。
+# p10k のように右プロンプトと点線フィラーで行幅いっぱいを使う設定だと必ず踏む。
+#
+# zsh の既定は「プロンプトを描き直す」だけで、古い行が複数行に散っていると消せない。
+# そこで、まだ1つもコマンドを実行していない間＝スクロールバックに失って困るものが
+# 無い間だけ、幅が変わったら画面ごと消して描き直す。コマンドを1つでも実行したら
+# 黙る（リサイズのたびに出力を消してしまわないように）。
+if [[ -o interactive ]]; then
+  autoload -Uz add-zsh-hook
+  typeset -gi _resize_pristine=1 _resize_last_cols=$COLUMNS
+  _resize_mark_used() { _resize_pristine=0 }
+  add-zsh-hook preexec _resize_mark_used
+
+  TRAPWINCH() {
+    if (( _resize_pristine && _resize_last_cols != COLUMNS )) && zle; then
+      zle .clear-screen
+    fi
+    _resize_last_cols=$COLUMNS
+  }
+fi
 
 # ---- autosuggestions: 候補を部分的に受け入れる（→単語単位など） ----
 bindkey '^f' autosuggest-accept   # Ctrl+Fで提案を丸ごと採用（好みで変更可）
@@ -159,12 +182,32 @@ _wezterm_send_user_var() {   # $1 = user-var 名。値は毎回変わる nonce
   fi
 }
 
+# フルスクリーン切替は macOS 側でアニメーションするので、user-var を送ってから
+# 実際に端末サイズが変わるまで 1.0〜1.2 秒かかる（herdr-server.log の client resize
+# 255x67 → 269x69 がその対）。待たずに herdr を起動すると、herdr は切替前の幅で
+# クライアントを繋いだあとリサイズを食らい、ペイン内のプロンプトが古い幅のまま
+# グリッドに残って階段状のゴミになる。サイズが動くまで待ってから起動する。
+_wezterm_wait_resize() {
+  local before after i
+  before="$(stty size 2>/dev/null)"
+  for (( i = 0; i < 30; i++ )); do   # 0.05s × 30 = 最大 1.5 秒で諦める
+    sleep 0.05
+    after="$(stty size 2>/dev/null)"
+    if [[ -n "$after" && "$after" != "$before" ]]; then
+      sleep 0.15   # 連続で来るリサイズが落ち着くのを待つ
+      return 0
+    fi
+  done
+  return 1
+}
+
 herdr() {
   local went_fullscreen=0
   if [[ "${TERM_PROGRAM-}" == "WezTerm" && "${HERDR_ENV-}" != "1" && -t 1 ]] \
      && _herdr_opens_tui "$@"; then
     _wezterm_send_user_var WEZTERM_FULLSCREEN
     went_fullscreen=1
+    _wezterm_wait_resize
   fi
   command herdr "$@"
   local ret=$?          # status は zsh の予約変数（$? の別名）なので使わない
