@@ -3,13 +3,16 @@ set -euo pipefail
 
 # reader-capture
 # kindle-capture と legend-capture を統合した、macOS用のページキャプチャCLI。
-# 会話形式で「Kindle」か「Legend(Libry)」を選び、開始/終了ページ・prefix・保存先・
-# ページ送り方向を入力して、表示中のページを指定範囲の連番PNGとして保存する。
+# 会話形式で「Kindle」「Legend(Libry)」「BlueChart(sviewer)」を選び、開始/終了ページ・prefix・
+# 保存先・ページ送り方向を入力して、表示中のページを指定範囲の連番PNGとして保存する。
 #
-#   - Kindle : Amazon Kindleアプリ（com.amazon.Lassen）の表示ページを撮影し、
-#              crop_black_borders で上部バー等を除外する。
-#   - Legend : Chrome上のLibryビューア（https://app.libry.jp/...）の表示ページを、
-#              JavaScriptで取得した画面矩形どおりに撮影し、page_click で余白を実クリックして送る。
+#   - Kindle    : Amazon Kindleアプリ（com.amazon.Lassen）の表示ページを撮影し、
+#                 crop_black_borders で上部バー等を除外する。
+#   - Legend    : Chrome上のLibryビューア（https://app.libry.jp/...）の表示ページを、
+#                 JavaScriptで取得した画面矩形どおりに撮影し、page_click で余白を実クリックして送る。
+#   - BlueChart : Chrome上のsviewerビューア（https://sviewer.jp/books/viewer.html...）。
+#                 常に見開き2ページ表示なので img.pageL / img.pageR を要素矩形どおりに
+#                 個別撮影し、1実ページ=1PNGにする。ページ送りは location.hash で確実に移動する。
 #
 # DRM解除・ファイル抽出・認証回避は行わない。自分のアカウントで閲覧中の資料を学習用に保存する用途。
 
@@ -28,6 +31,50 @@ KINDLE_BUNDLE_ID="com.amazon.Lassen"
 CHROME_BUNDLE_ID="com.google.Chrome"
 MAX_CAPTURE_COUNT=500
 
+# BlueChart（sviewer）の標準ウインドウサイズ。
+# 取り込み時期をまたいでも解像度・余白を揃えるため、キャプチャ開始前に必ずこの大きさに設定する。
+# 値は AppleScript の bounds 形式（左,上,右,下・ポイント）。--window で上書き、--no-window で無効化。
+BLUECHART_BOUNDS_DEFAULT="${BLUECHART_WINDOW_BOUNDS:-138,30,2416,1397}"
+# 上の標準サイズで撮れる1ページあたりの実寸（ポイント）。ずれたら警告するだけで中断はしない。
+BLUECHART_REF_PAGE_W=797
+BLUECHART_REF_PAGE_H=1131
+# 紙面ページ番号 = sviewerの画像番号 − この値（青チャート数学I+A は 3）
+BLUECHART_PAGE_OFFSET_DEFAULT=3
+
+# ---- 教材の置き場（Legend / BlueChart）------------------------------------
+# 取り込み先は「プロジェクト/scans/<本>/<部分>/」に決めてあるので、毎回フルパスを
+# 打たせず「どの本の・どの部分か」だけ選ばせて機械的に組み立てる。
+# 環境変数で置き場を移せる（別マシンでパスが違う場合など）。
+LEGEND_ROOT="${LEGEND_ROOT:-$HOME/Projects/Legend}"
+BLUECHART_ROOT="${BLUECHART_ROOT:-$HOME/Projects/MATH/Blue-chart}"
+
+# 本コード → 表示名
+typeset -A BOOK_LABEL
+BOOK_LABEL=(1a "数学I+A" 2b "数学II+B" 3c "数学III+C")
+BOOK_ORDER=(1a 2b 3c)
+
+# 部分コード → 保存先ディレクトリ名 / ファイル名prefix / 表示名。
+# ⚠ prefix はディレクトリ名と違う（problems/ に problem_p0001.png）。
+#    取り込み側（Legend の app/paths.py の SCAN_KINDS）と必ず一致させること。
+typeset -A SECTION_DIR SECTION_PREFIX SECTION_LABEL
+SECTION_DIR=(honpen honpen problems problems answers answers intro intro)
+SECTION_PREFIX=(honpen honpen problems problem answers answer intro intro)
+SECTION_LABEL=(
+  honpen   "本編（例題集。章扉の例題MAP・例題一覧もここ）"
+  problems "別冊 問題編"
+  answers  "解答編"
+  intro    "巻頭"
+)
+SECTION_ORDER=(honpen problems answers intro)
+
+project_root_for_mode() {
+  case "$1" in
+    legend)    print -- "$LEGEND_ROOT" ;;
+    bluechart) print -- "$BLUECHART_ROOT" ;;
+    *)         print -- "" ;;
+  esac
+}
+
 fail() {
   print -u2 -- "エラー: $*"
   exit 1
@@ -36,32 +83,55 @@ fail() {
 usage() {
   cat <<'EOF'
 使い方:
-  reader_capture                     会話形式で順に入力（推奨）
-  reader_capture kindle 188 220 [オプション]
-  reader_capture legend 14 20  [オプション]
+  reader_capture                        会話形式で順に入力（推奨）
+  reader_capture kindle 188 220    [オプション]
+  reader_capture legend 332 449 --book 1a --section honpen
+  reader_capture bluechart 515 594 --book 1a --section honpen
 
 会話形式（引数なし）で実行すると、次を順に質問します:
-  1. どのビューアか（Kindle / Legend）
-  2. 開始ページ / 終了ページ
-  3. ファイル名のprefix
-  4. 保存先フォルダ
-  5. ページ送り方向（right / left）
+  1. どのビューアか（Kindle / Legend / BlueChart）
+  2. どの本か（数学I+A / 数学II+B / 数学III+C）※Legend・BlueChart
+  3. どの部分か（本編 / 別冊問題編 / 解答編 / 巻頭）※Legend・BlueChart
+     → 2と3から prefix と保存先を自動で決めるので、フルパスを打つ必要はありません。
+  4. 開始ページ / 終了ページ
+  5. ページ送り方向（right / left）※BlueChartは不要なので聞きません
 省略した項目だけを質問し、指定済みの項目は質問しません。
+--output を明示したときは 2・3 を聞かず、そのフォルダに保存します。
+
+保存先の決まり（Legend / BlueChart）:
+  <プロジェクト>/scans/<本>/<部分>/<prefix>_pNNNN.png
+    本   : 1a=数学I+A / 2b=数学II+B / 3c=数学III+C
+    部分 : honpen（本編）→ honpen_p0332.png
+           problems（別冊問題編）→ problem_p0001.png   ※prefixは単数形
+           answers（解答編）→ answer_p0001.png
+           intro（巻頭）→ intro_p0001.png
+  プロジェクトの場所は環境変数 LEGEND_ROOT / BLUECHART_ROOT で変えられます。
 
 オプション:
-  -o, --output DIR       保存先フォルダ
+  -o, --output DIR       保存先フォルダ（指定すると本・部分は聞きません）
   -p, --prefix NAME      ファイル名の先頭文字
-  -d, --delay SEC        ページ送り後の待機秒数（Kindle既定1.3 / Legend既定1.2）
-      --direction DIR    right または left
+  -b, --book CODE        1a / 2b / 3c
+  -s, --section NAME     honpen / problems / answers / intro
+  -d, --delay SEC        ページ送り後の待機秒数（Kindle既定1.3 / Legend既定1.2 / BlueChart既定0.8）
+      --direction DIR    right または left（BlueChartでは使いません）
       --mode MODE        （Kindleのみ）page または margin（既定: margin）
                          page  : 上部バーと検出可能な左右余白を除外
                          margin: 上部バーだけ除外
-      --countdown SEC    開始前の待機秒数（Kindle既定2 / Legend既定3）
-      --check            （Legendのみ）連携と座標の確認だけ行い保存しない
+      --countdown SEC    開始前の待機秒数（Kindle既定2 / Legend・BlueChart既定3）
+      --check            （Legend/BlueChart）連携と座標の確認だけ行い保存しない
+      --page-offset N    （BlueChartのみ）紙面ページ = 画像番号 − N（既定3）
+      --window BOUNDS    （BlueChartのみ）Chromeウインドウを 左,上,右,下 に設定（既定は標準サイズ）
+      --no-window        （BlueChartのみ）ウインドウサイズを変更しない
   -h, --help             この説明を表示
 
 入力したページ番号はファイル名と枚数の管理に使います。
 実行前に、対象アプリ（Kindle / Chrome）で開始ページを表示しておいてください。
+
+BlueChart（sviewer）について:
+  ・見開き表示のまま、左右のページ画像を別々のPNGとして保存します（1実ページ=1PNG）。
+  ・ページ番号は「紙面に印刷されたページ番号」で指定・命名します。
+  ・開始ページがどこに表示されていても、location.hash で該当の見開きへ自動で移動します。
+  ・解像度を取り込み時期でそろえるため、開始前にChromeを標準サイズへ自動設定します。
 EOF
 }
 
@@ -81,12 +151,18 @@ DIRECTION=""
 CAPTURE_MODE=""
 COUNTDOWN=""
 CHECK_ONLY=0
+PAGE_OFFSET=""
+WINDOW_BOUNDS=""
+SET_WINDOW=1
+BOOK_CODE=""
+SECTION_CODE=""
 
-# 先頭の位置引数: モード（kindle/legend）とページ番号
+# 先頭の位置引数: モード（kindle/legend/bluechart）とページ番号
 if (( $# >= 1 )) && [[ "$1" != -* ]]; then
   case "$1" in
     kindle|Kindle|k) READER_MODE="kindle"; shift ;;
     legend|Legend|libry|Libry|l) READER_MODE="legend"; shift ;;
+    bluechart|BlueChart|bluechart|blue|bc|sviewer|chart|b) READER_MODE="bluechart"; shift ;;
     *) : ;;  # 数字等ならモード未指定として扱い、後で質問
   esac
 fi
@@ -105,6 +181,12 @@ while (( $# > 0 )); do
     -p|--prefix)
       (( $# >= 2 )) || fail "$1には文字列を指定してください。"
       FILE_PREFIX="$2"; shift 2 ;;
+    -b|--book)
+      (( $# >= 2 )) || fail "$1には 1a / 2b / 3c を指定してください。"
+      BOOK_CODE="$2"; shift 2 ;;
+    -s|--section)
+      (( $# >= 2 )) || fail "$1には honpen / problems / answers / intro を指定してください。"
+      SECTION_CODE="$2"; shift 2 ;;
     -d|--delay)
       (( $# >= 2 )) || fail "$1には秒数を指定してください。"
       PAGE_DELAY="$2"; shift 2 ;;
@@ -119,6 +201,14 @@ while (( $# > 0 )); do
       COUNTDOWN="$2"; shift 2 ;;
     --check)
       CHECK_ONLY=1; shift ;;
+    --page-offset)
+      (( $# >= 2 )) || fail "$1には整数を指定してください。"
+      PAGE_OFFSET="$2"; shift 2 ;;
+    --window)
+      (( $# >= 2 )) || fail "$1には 左,上,右,下 を指定してください。"
+      WINDOW_BOUNDS="$2"; SET_WINDOW=1; shift 2 ;;
+    --no-window)
+      SET_WINDOW=0; shift ;;
     -h|--help)
       usage; exit 0 ;;
     *)
@@ -131,11 +221,13 @@ if [[ -z "$READER_MODE" ]]; then
   print -- "どのビューアから取り込みますか？"
   print -- "  1) Kindle       （Amazon Kindleアプリ）"
   print -- "  2) Legend/Libry （Chrome上のLibryビューア）"
+  print -- "  3) BlueChart    （Chrome上のsviewerビューア・青チャート等）"
   read -r "MODE_REPLY?番号を入力 [1]: "
   case "${MODE_REPLY:-1}" in
     1|kindle|Kindle|k) READER_MODE="kindle" ;;
     2|legend|Legend|libry|Libry|l) READER_MODE="legend" ;;
-    *) fail "1（Kindle）または2（Legend）を選んでください。" ;;
+    3|bluechart|BlueChart|blue|bc|sviewer|chart|b) READER_MODE="bluechart" ;;
+    *) fail "1（Kindle）・2（Legend）・3（BlueChart）から選んでください。" ;;
   esac
 fi
 
@@ -145,15 +237,75 @@ if [[ "$READER_MODE" == "kindle" ]]; then
   [[ -n "$PAGE_DELAY" ]] || PAGE_DELAY="1.3"
   [[ -n "$COUNTDOWN"  ]] || COUNTDOWN="2"
   [[ -n "$CAPTURE_MODE" ]] || CAPTURE_MODE="margin"
+elif [[ "$READER_MODE" == "bluechart" ]]; then
+  DEFAULT_PREFIX="honpen"
+  [[ -n "$PAGE_DELAY" ]] || PAGE_DELAY="0.8"
+  [[ -n "$COUNTDOWN"  ]] || COUNTDOWN="3"
+  [[ -n "$PAGE_OFFSET" ]] || PAGE_OFFSET="$BLUECHART_PAGE_OFFSET_DEFAULT"
+  [[ -n "$WINDOW_BOUNDS" ]] || WINDOW_BOUNDS="$BLUECHART_BOUNDS_DEFAULT"
 else
   DEFAULT_PREFIX="legend"
   [[ -n "$PAGE_DELAY" ]] || PAGE_DELAY="1.2"
   [[ -n "$COUNTDOWN"  ]] || COUNTDOWN="3"
 fi
 
-# Legendの --check は連携確認のみ。ページ入力は不要。
-if (( CHECK_ONLY == 1 )) && [[ "$READER_MODE" == "legend" ]]; then
+# Legend / BlueChart の --check は連携確認のみ。ページ入力は不要。
+if (( CHECK_ONLY == 1 )) && [[ "$READER_MODE" != "kindle" ]]; then
   START_PAGE="0"; END_PAGE="0"
+fi
+
+# ---- 本と部分から prefix・保存先を自動で決める（Legend / BlueChart）-------
+# --output を明示したときは従来どおり素通し（自由な置き場を潰さない）。
+PROJECT_ROOT="$(project_root_for_mode "$READER_MODE")"
+if [[ -n "$PROJECT_ROOT" ]] && [[ -z "$OUTPUT_DIR" ]] && (( CHECK_ONLY == 0 )); then
+  if [[ -z "$BOOK_CODE" ]]; then
+    print -- "どの本ですか？（保存先: $PROJECT_ROOT/scans/<本>/<部分>/）"
+    local_i=1
+    for b in $BOOK_ORDER; do
+      print -- "  $local_i) ${BOOK_LABEL[$b]}  ($b)"
+      (( local_i++ ))
+    done
+    print -- "  0) その他（保存先を自分で入力する）"
+    while [[ -z "$BOOK_CODE" ]]; do
+      read -r "BOOK_REPLY?番号を入力: "
+      case "$BOOK_REPLY" in
+        1|1a) BOOK_CODE="1a" ;;
+        2|2b) BOOK_CODE="2b" ;;
+        3|3c) BOOK_CODE="3c" ;;
+        0)    BOOK_CODE="-"  ;;   # 自動決定をやめて従来の質問へ
+        *)    print -- "  0〜3 から選んでください。" ;;
+      esac
+    done
+  fi
+  [[ -n "${BOOK_LABEL[$BOOK_CODE]:-}" || "$BOOK_CODE" == "-" ]] || \
+    fail "--book は 1a / 2b / 3c のいずれかにしてください（指定: $BOOK_CODE）。"
+
+  if [[ "$BOOK_CODE" != "-" ]] && [[ -z "$SECTION_CODE" ]]; then
+    print -- "${BOOK_LABEL[$BOOK_CODE]} のどの部分を取り込みますか？"
+    local_i=1
+    for s in $SECTION_ORDER; do
+      print -- "  $local_i) ${SECTION_LABEL[$s]}  → scans/$BOOK_CODE/${SECTION_DIR[$s]}/${SECTION_PREFIX[$s]}_pNNNN.png"
+      (( local_i++ ))
+    done
+    while [[ -z "$SECTION_CODE" ]]; do
+      read -r "SECTION_REPLY?番号を入力 [1]: "
+      case "${SECTION_REPLY:-1}" in
+        1|honpen)   SECTION_CODE="honpen" ;;
+        2|problems|problem) SECTION_CODE="problems" ;;
+        3|answers|answer)   SECTION_CODE="answers" ;;
+        4|intro)    SECTION_CODE="intro" ;;
+        *) print -- "  1〜4 から選んでください。" ;;
+      esac
+    done
+  fi
+
+  if [[ "$BOOK_CODE" != "-" ]] && [[ -n "$SECTION_CODE" ]]; then
+    [[ -n "${SECTION_DIR[$SECTION_CODE]:-}" ]] || \
+      fail "--section は honpen / problems / answers / intro のいずれかにしてください（指定: $SECTION_CODE）。"
+    OUTPUT_DIR="$PROJECT_ROOT/scans/$BOOK_CODE/${SECTION_DIR[$SECTION_CODE]}"
+    # --prefix を明示していればそちらを尊重する
+    [[ -n "$FILE_PREFIX" ]] || FILE_PREFIX="${SECTION_PREFIX[$SECTION_CODE]}"
+  fi
 fi
 
 if (( CHECK_ONLY == 0 )); then
@@ -176,6 +328,10 @@ if (( CHECK_ONLY == 0 )); then
 fi
 
 if [[ -z "$DIRECTION" ]] && (( CHECK_ONLY == 1 )); then
+  DIRECTION="right"
+fi
+# BlueChartは location.hash で目的の見開きへ直接移動するため、送り方向は使わない。
+if [[ -z "$DIRECTION" ]] && [[ "$READER_MODE" == "bluechart" ]]; then
   DIRECTION="right"
 fi
 if [[ -z "$DIRECTION" ]]; then
@@ -201,6 +357,14 @@ if (( CHECK_ONLY == 0 )); then
 fi
 [[ "$PAGE_DELAY" =~ '^[0-9]+([.][0-9]+)?$' ]] || fail "待機時間は0以上の数値にしてください。"
 [[ "$COUNTDOWN" =~ '^[0-9]+([.][0-9]+)?$' ]] || fail "開始前待機は0以上の数値にしてください。"
+
+if [[ "$READER_MODE" == "bluechart" ]]; then
+  [[ "$PAGE_OFFSET" =~ '^-?[0-9]+$' ]] || fail "--page-offset は整数にしてください。"
+  if (( SET_WINDOW == 1 )); then
+    [[ "$WINDOW_BOUNDS" =~ '^-?[0-9]+,-?[0-9]+,-?[0-9]+,-?[0-9]+$' ]] || \
+      fail "--window は 左,上,右,下 の4整数で指定してください（例: 138,30,2416,1397）。"
+  fi
+fi
 
 CAPTURE_COUNT=$(( END_PAGE - START_PAGE + 1 ))
 (( CAPTURE_COUNT <= MAX_CAPTURE_COUNT )) || fail "一度に保存できるのは最大${MAX_CAPTURE_COUNT}ページです。"
@@ -452,9 +616,224 @@ OSA
   print -- "完了: ${CAPTURE_COUNT}ページを保存しました。"
 }
 
+# ==========================================================================
+# BlueChart / sviewer モード
+#
+# sviewer は常に見開き2ページ表示で、DOM上は img.pageL / img.pageR の2要素に分かれている。
+# そこで中央での機械的な分割ではなく、要素の矩形どおりに左右を個別撮影して 1実ページ=1PNG にする。
+# ページ送りはクリックではなく location.hash（#page=N）で直接移動し、移動後に画像番号を
+# 照合してから撮る。これで「送りそこねて同じページを2枚保存」「番号がずれる」を構造的に防ぐ。
+#
+#   見開き番号 N  ↔  左=画像(2N-1) / 右=画像(2N)
+#   紙面ページ    =  画像番号 − PAGE_OFFSET
+# ==========================================================================
+do_bluechart() {
+  # Chrome で JavaScript を実行（単一行・ダブルクォート/バックスラッシュ無しのJSのみ）
+  run_js() {
+    local js="$1"
+    local out
+    if ! out=$(/usr/bin/osascript 2>&1 <<OSA
+tell application "Google Chrome"
+  set theResult to execute active tab of front window javascript "$js"
+end tell
+return theResult
+OSA
+    ); then
+      if [[ "$out" == *JavaScript* && ( "$out" == *off* || "$out" == *turned* || "$out" == *許可* ) ]]; then
+        fail "ChromeのApple EventからのJavaScriptが無効です。Chromeメニュー「表示 > デベロッパ > Apple EventからのJavaScriptを許可」をオンにしてください。"
+      fi
+      if [[ "$out" == *"-1743"* || "$out" == *"not allowed"* || "$out" == *Automation* || "$out" == *"許可されていません"* ]]; then
+        fail "ターミナルからChromeを操作する権限がありません。システム設定 > プライバシーとセキュリティ > オートメーション で、ターミナルにGoogle Chromeを許可してください。"
+      fi
+      fail "Chromeの操作に失敗しました: $out"
+    fi
+    print -r -- "$out"
+  }
+
+  # 表示中の見開きの状態を返す。読み込み途中なら WAIT。
+  local STATE_JS="(function(){var g=outerHeight-innerHeight;var L=document.querySelector('img.pageL');var R=document.querySelector('img.pageR');if(!L||!R)return 'WAIT';if(!L.complete||!R.complete||!L.naturalWidth||!R.naturalWidth)return 'WAIT';var a=L.getBoundingClientRect();var b=R.getBoundingClientRect();if(a.width<100||a.height<100||b.width<100||b.height<100)return 'WAIT';var ln=parseInt(L.src.split('/').pop(),10);var rn=parseInt(R.src.split('/').pop(),10);if(!ln||!rn)return 'WAIT';return 'OK|'+ln+'|'+rn+'|'+Math.round(screenX+a.left)+'|'+Math.round(screenY+g+a.top)+'|'+Math.round(a.width)+'|'+Math.round(a.height)+'|'+Math.round(screenX+b.left)+'|'+Math.round(screenY+g+b.top)+'|'+Math.round(b.width)+'|'+Math.round(b.height)+'|'+L.naturalWidth+'x'+L.naturalHeight;})()"
+
+  local IMG_L IMG_R LX LY LW LH RX RY RW RH NAT_WH
+
+  read_state() {
+    local s
+    s=$(run_js "$STATE_JS") || return 1
+    [[ "$s" == OK\|* ]] || return 1
+    s="${s#OK|}"
+    IMG_L="${s%%|*}"; s="${s#*|}"
+    IMG_R="${s%%|*}"; s="${s#*|}"
+    LX="${s%%|*}"; s="${s#*|}"
+    LY="${s%%|*}"; s="${s#*|}"
+    LW="${s%%|*}"; s="${s#*|}"
+    LH="${s%%|*}"; s="${s#*|}"
+    RX="${s%%|*}"; s="${s#*|}"
+    RY="${s%%|*}"; s="${s#*|}"
+    RW="${s%%|*}"; s="${s#*|}"
+    RH="${s%%|*}"; s="${s#*|}"
+    NAT_WH="${s%%|*}"
+    [[ "$LW" =~ '^[0-9]+$' && "$LH" =~ '^[0-9]+$' ]] || return 1
+    (( LW >= 100 && LH >= 100 )) || return 1
+    return 0
+  }
+
+  # 指定の見開きへ移動し、画像番号が期待どおりになるまで待つ
+  goto_spread() {
+    local spread="$1" want_l="$2" tries=0
+    run_js "(function(){location.hash='#page=${spread}';return 'GO';})()" >/dev/null || return 1
+    while (( tries < 60 )); do
+      if read_state && [[ "$IMG_L" == "$want_l" ]]; then
+        return 0
+      fi
+      /bin/sleep 0.3
+      (( tries += 1 ))
+    done
+    return 1
+  }
+
+  /usr/bin/open -b "$CHROME_BUNDLE_ID" >/dev/null 2>&1 || fail "Google Chrome を起動できません。"
+  /usr/bin/osascript -e 'tell application "Google Chrome" to activate' >/dev/null 2>&1 || true
+
+  # アクティブタブが sviewer かどうか確認する
+  local CUR_URL
+  CUR_URL=$(/usr/bin/osascript -e 'tell application "Google Chrome" to get URL of active tab of front window' 2>/dev/null) || \
+    fail "Chromeのタブを読めません。オートメーション権限を確認してください。"
+  [[ "$CUR_URL" == *sviewer.jp* ]] || \
+    fail "アクティブタブが sviewer ではありません（$CUR_URL）。Chromeの手前のウインドウで教科書ビューアのタブを選んでから実行してください。"
+
+  # 取り込み時期をまたいでも解像度をそろえるため、標準ウインドウサイズに設定する
+  if (( SET_WINDOW == 1 )); then
+    local B1="${WINDOW_BOUNDS%%,*}" BR="${WINDOW_BOUNDS#*,}"
+    local B2="${BR%%,*}"; BR="${BR#*,}"
+    local B3="${BR%%,*}"; local B4="${BR#*,}"
+    /usr/bin/osascript -e "tell application \"Google Chrome\" to set bounds of front window to {$B1, $B2, $B3, $B4}" >/dev/null 2>&1 || \
+      fail "Chromeのウインドウサイズを設定できません。"
+    /bin/sleep 1.5
+  fi
+
+  read_state || fail "見開きページの画像が見つかりません。ビューアがページを表示しきってから実行してください。"
+
+  # 紙面ページ ↔ 見開き番号
+  local START_IMG=$(( START_PAGE + PAGE_OFFSET ))
+  local END_IMG=$(( END_PAGE + PAGE_OFFSET ))
+  local START_SPREAD=$(( (START_IMG + 1) / 2 ))
+  local END_SPREAD=$(( (END_IMG + 1) / 2 ))
+
+  if (( CHECK_ONLY == 1 )); then
+    print -- "チェック結果:"
+    print -- "  Chrome連携      : OK（JavaScript実行可）"
+    print -- "  タブ            : $CUR_URL"
+    print -- "  表示中の見開き  : 画像 ${IMG_L} / ${IMG_R} → 紙面 p.$(( IMG_L - PAGE_OFFSET )) / p.$(( IMG_R - PAGE_OFFSET ))"
+    print -- "  ページ番号対応  : 紙面ページ = 画像番号 − ${PAGE_OFFSET}"
+    print -- "  左ページ矩形    : x=${LX}, y=${LY}, w=${LW}, h=${LH}（画面座標・ポイント）"
+    print -- "  右ページ矩形    : x=${RX}, y=${RY}, w=${RW}, h=${RH}"
+    print -- "  保存される画素数: $(( LW * 2 ))x$(( LH * 2 )) 相当（Retina 2倍・元画像 ${NAT_WH}）"
+    if (( SET_WINDOW == 1 )); then
+      print -- "  ウインドウ      : ${WINDOW_BOUNDS} に設定済み（標準サイズ）"
+    fi
+    if (( LW != BLUECHART_REF_PAGE_W || LH != BLUECHART_REF_PAGE_H )); then
+      print -- "  ※注意: 標準の1ページ実寸 ${BLUECHART_REF_PAGE_W}x${BLUECHART_REF_PAGE_H} と異なります。過去の取り込みと解像度がそろいません。"
+    fi
+    print -- "準備OKです。実際に保存するには開始/終了ページを指定して実行してください。"
+    exit 0
+  fi
+
+  print -- "Reader Capture — BlueChart / sviewer"
+  print -- "  範囲       : p.${START_PAGE}〜p.${END_PAGE}（${CAPTURE_COUNT}ページ）"
+  print -- "  見開き     : #page=${START_SPREAD}〜${END_SPREAD}（$(( END_SPREAD - START_SPREAD + 1 ))見開き）"
+  print -- "  保存先     : $OUTPUT_DIR"
+  print -- "  接頭辞     : $FILE_PREFIX"
+  print -- "  ページ対応 : 紙面ページ = 画像番号 − ${PAGE_OFFSET}"
+  print -- "  1ページ実寸: ${LW}x${LH}pt → $(( LW * 2 ))x$(( LH * 2 ))px（元画像 ${NAT_WH}）"
+  if (( SET_WINDOW == 1 )); then
+    print -- "  ウインドウ : ${WINDOW_BOUNDS}（標準サイズに設定済み）"
+  else
+    print -- "  ウインドウ : 変更なし（--no-window）"
+  fi
+  if (( LW != BLUECHART_REF_PAGE_W || LH != BLUECHART_REF_PAGE_H )); then
+    print -- ""
+    print -- "  ※注意: 標準の1ページ実寸 ${BLUECHART_REF_PAGE_W}x${BLUECHART_REF_PAGE_H}pt と異なります。"
+    print -- "         過去に取り込んだページと解像度がそろいません。"
+  fi
+  print -- ""
+  print -- "実行中はChromeウインドウを動かさないでください。${COUNTDOWN}秒後に開始します。"
+  /bin/sleep "$COUNTDOWN"
+
+  is_png() {
+    [[ -s "$1" ]] || return 1
+    local sig
+    sig=$(/usr/bin/head -c 8 -- "$1" | /usr/bin/od -An -tx1 | /usr/bin/tr -d ' \n')
+    [[ "$sig" == "89504e470d0a1a0a" ]]
+  }
+
+  # 指定矩形を撮ってPNGとして保存
+  shoot() {
+    local dest="$1" x="$2" y="$3" w="$4" h="$5" tmp
+    /usr/bin/osascript -e 'tell application "Google Chrome" to activate' >/dev/null 2>&1 || true
+    /bin/sleep 0.25
+    tmp=$(/usr/bin/mktemp -t reader_bluechart_capture)
+    if /usr/sbin/screencapture -x -R"${x},${y},${w},${h}" "$tmp" 2>/dev/null && is_png "$tmp"; then
+      /bin/mv -f -- "$tmp" "$dest"
+      return 0
+    fi
+    /bin/rm -f -- "$tmp"
+    return 1
+  }
+
+  local SAVED=0
+  local spread img_l img_r page_l page_r PAGE_TEXT OUTPUT_PATH
+  local side this_page this_img
+  local PREVIOUS_OUTPUT=""
+
+  for (( spread = START_SPREAD; spread <= END_SPREAD; spread++ )); do
+    img_l=$(( spread * 2 - 1 ))
+    img_r=$(( spread * 2 ))
+    page_l=$(( img_l - PAGE_OFFSET ))
+    page_r=$(( img_r - PAGE_OFFSET ))
+
+    goto_spread "$spread" "$img_l" || \
+      fail "見開き #page=${spread}（紙面 p.${page_l}/p.${page_r}）へ移動できませんでした。ビューアの表示を確認してください。"
+    [[ "$IMG_R" == "$img_r" ]] || \
+      fail "見開き #page=${spread} の右ページ画像が想定と違います（想定 ${img_r} / 実際 ${IMG_R}）。--page-offset を確認してください。"
+
+    /bin/sleep "$PAGE_DELAY"
+    read_state || fail "見開き #page=${spread} の描画状態を取得できませんでした。"
+
+    # 左ページ → 右ページの順に、範囲内のものだけ保存する
+    for side in L R; do
+      if [[ "$side" == "L" ]]; then
+        this_page="$page_l"; this_img="$img_l"
+      else
+        this_page="$page_r"; this_img="$img_r"
+      fi
+      (( this_page >= START_PAGE && this_page <= END_PAGE )) || continue
+
+      printf -v PAGE_TEXT '%04d' "$this_page"
+      OUTPUT_PATH="$OUTPUT_DIR/${FILE_PREFIX}_p${PAGE_TEXT}.png"
+      if [[ "$side" == "L" ]]; then
+        shoot "$OUTPUT_PATH" "$LX" "$LY" "$LW" "$LH" || \
+          fail "ページの撮影に失敗しました（p${PAGE_TEXT}）。Chromeが前面か、画面収録権限があるか確認してください。"
+      else
+        shoot "$OUTPUT_PATH" "$RX" "$RY" "$RW" "$RH" || \
+          fail "ページの撮影に失敗しました（p${PAGE_TEXT}）。Chromeが前面か、画面収録権限があるか確認してください。"
+      fi
+
+      if [[ -n "$PREVIOUS_OUTPUT" ]] && /usr/bin/cmp -s -- "$PREVIOUS_OUTPUT" "$OUTPUT_PATH"; then
+        /bin/rm -f -- "$OUTPUT_PATH"
+        fail "前ページと同じ画像になりました（p${PAGE_TEXT}）。ビューアが更新されていない可能性があります（--delay を伸ばしてください）。"
+      fi
+
+      (( SAVED += 1 ))
+      print -- "[${SAVED}/${CAPTURE_COUNT}] $OUTPUT_PATH  (#page=${spread} ${side} 画像${this_img})"
+      PREVIOUS_OUTPUT="$OUTPUT_PATH"
+    done
+  done
+
+  print -- "完了: ${SAVED}ページを保存しました。"
+}
+
 # ---- 実行 -----------------------------------------------------------------
-if [[ "$READER_MODE" == "kindle" ]]; then
-  do_kindle
-else
-  do_legend
-fi
+case "$READER_MODE" in
+  kindle)    do_kindle ;;
+  bluechart) do_bluechart ;;
+  *)         do_legend ;;
+esac

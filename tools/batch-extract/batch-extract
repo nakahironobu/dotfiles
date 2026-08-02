@@ -1,0 +1,267 @@
+#!/bin/zsh
+set -euo pipefail
+
+# batch-extract
+# 教材の紙面PNG/PDFを OCR で一次抽出するバッチの入口。会話形式で「どの教材か」から順に選ばせ、
+# 各プロジェクトの抽出パイプラインへ委譲する。reader_capture と操作感を揃えてある
+# （取り込み＝reader_capture → 抽出＝batch_extract の2本立て）。
+#
+#   - Legend     : Legend/extract/legend_pipeline.py       単ページPNG → 素材バンドル
+#   - Blue-chart : Blue-chart/extract/bluechart_pipeline.py 同上（青チャート・sviewer由来）
+#   - SAPIX      : SAPIX/extract/batch_extract.py           input/ のPDFを走査
+#
+# 抽出は macOS ローカルのモデル群（NDL-OCR / DocLayout-YOLO / YomiToku / LaTeX-OCR）に依存する。
+# **Terminal.app から実行すること。** Claude Code の Bash から起動すると Claude.app の
+# サンドボックス権限を継承し、モデルや保護フォルダに届かない。
+
+# プロジェクトの置き場。別マシンでパスが違うなら環境変数で移せる。
+LEGEND_ROOT="${LEGEND_ROOT:-$HOME/Projects/Legend}"
+BLUECHART_ROOT="${BLUECHART_ROOT:-$HOME/Projects/MATH/Blue-chart}"
+SAPIX_ROOT="${SAPIX_ROOT:-$HOME/Projects/SAPIX}"
+
+# OCRスタック（onnxruntime / opencv / pillow）は ~/Projects の workspace 共有venv にある。
+# Blue-chart は独自venv（Flaskアプリ用）なので、抽出だけは workspace 側を借りる。
+WORKSPACE_ROOT="${WORKSPACE_ROOT:-$HOME/Projects}"
+
+fail() {
+  print -u2 -- "エラー: $*"
+  exit 1
+}
+
+usage() {
+  cat <<'EOF'
+使い方:
+  batch_extract                                   会話形式で順に入力（推奨）
+  batch_extract legend     --book 1a --section honpen --range 332-449
+  batch_extract bluechart  --book 1a --section honpen --range 297-380
+  batch_extract sapix      [batch_extract.py の引数...]
+
+会話形式（引数なし）で実行すると、次を順に質問します:
+  1. どの教材か（Legend / Blue-chart / SAPIX）
+  2. どの本か（数学I+A / 数学II+B / 数学III+C）※Legend・Blue-chart
+  3. どの部分か（本編 / 別冊問題編 / 解答編 / 巻頭）※Legend・Blue-chart
+  4. ページ範囲（例: 297-380 や 5,7,9-12）
+省略した項目だけを質問し、指定済みの項目は質問しません。
+
+読み込み: <プロジェクト>/scans/<本>/<部分>/
+書き出し: <プロジェクト>/extract/<本>/outputs/pipeline/<部分>/page_NNNN/
+
+オプション:
+  -b, --book CODE      1a / 2b / 3c
+  -s, --section NAME   honpen / problems / answers / intro
+  -r, --range SPEC     ページ範囲。例: 297-380 や 5,7,9-12
+      --check          ツール導通確認だけ行い、抽出しない
+      --conf N         DocLayout 信頼度しきい値（既定 0.4）
+      --no-yomitoku    表のHTML化を行わない
+      --no-latex       数式のLaTeX化を行わない（画像は残す）
+  -h, --help           この説明を表示
+
+これ以外のオプションは、そのまま各パイプラインへ渡します。
+
+プロジェクトの場所は環境変数 LEGEND_ROOT / BLUECHART_ROOT / SAPIX_ROOT で変えられます。
+EOF
+}
+
+# ---- 教材の定義 -----------------------------------------------------------
+# 本コード → 表示名。Blue-chart はいま数学I+A だけ取り込んでいる。
+typeset -A BOOK_LABEL
+BOOK_LABEL=(1a "数学I+A" 2b "数学II+B" 3c "数学III+C")
+
+# 部分コード → 表示名。reader_capture の SECTION_LABEL と揃えてある。
+typeset -A SECTION_LABEL
+SECTION_LABEL=(
+  honpen   "本編（例題集。章扉の例題MAP・例題一覧もここ）"
+  problems "別冊 問題編"
+  answers  "解答編"
+  intro    "巻頭"
+)
+SECTION_ORDER=(honpen problems answers intro)
+
+books_for_target() {
+  case "$1" in
+    legend)    print -- "1a 2b 3c" ;;
+    bluechart) print -- "1a" ;;
+    *)         print -- "" ;;
+  esac
+}
+
+root_for_target() {
+  case "$1" in
+    legend)    print -- "$LEGEND_ROOT" ;;
+    bluechart) print -- "$BLUECHART_ROOT" ;;
+    sapix)     print -- "$SAPIX_ROOT" ;;
+    *)         print -- "" ;;
+  esac
+}
+
+pipeline_for_target() {
+  case "$1" in
+    legend)    print -- "extract/legend_pipeline.py" ;;
+    bluechart) print -- "extract/bluechart_pipeline.py" ;;
+    sapix)     print -- "extract/batch_extract.py" ;;
+    *)         print -- "" ;;
+  esac
+}
+
+label_for_target() {
+  case "$1" in
+    legend)    print -- "Legend（NEW ACTION LEGEND・Libry）" ;;
+    bluechart) print -- "Blue-chart（青チャート・sviewer）" ;;
+    sapix)     print -- "SAPIX（input/ のPDF一括）" ;;
+    *)         print -- "$1" ;;
+  esac
+}
+
+# ---- 引数解析 -------------------------------------------------------------
+if (( $# >= 1 )) && [[ "$1" == "-h" || "$1" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+TARGET=""
+BOOK_CODE=""
+SECTION_CODE=""
+PAGE_RANGE=""
+CHECK_ONLY=0
+PASSTHRU=()
+
+if (( $# >= 1 )) && [[ "$1" != -* ]]; then
+  case "$1" in
+    legend|Legend|l)                      TARGET="legend"; shift ;;
+    bluechart|BlueChart|blue|bc|chart|b)  TARGET="bluechart"; shift ;;
+    sapix|SAPIX|s)                        TARGET="sapix"; shift ;;
+    *) fail "不明な教材です: $1（legend / bluechart / sapix）" ;;
+  esac
+fi
+
+while (( $# > 0 )); do
+  case "$1" in
+    -b|--book)
+      (( $# >= 2 )) || fail "$1には 1a / 2b / 3c を指定してください。"
+      BOOK_CODE="$2"; shift 2 ;;
+    -s|--section)
+      (( $# >= 2 )) || fail "$1には honpen / problems / answers / intro を指定してください。"
+      SECTION_CODE="$2"; shift 2 ;;
+    -r|--range)
+      (( $# >= 2 )) || fail "$1にはページ範囲を指定してください（例: 297-380）。"
+      PAGE_RANGE="$2"; shift 2 ;;
+    --check)
+      CHECK_ONLY=1; shift ;;
+    -h|--help)
+      usage; exit 0 ;;
+    *)
+      PASSTHRU+=("$1"); shift ;;
+  esac
+done
+
+# ---- 会話形式の入力 -------------------------------------------------------
+if [[ -z "$TARGET" ]]; then
+  print -- "どの教材を OCR 抽出しますか？"
+  print -- "  1) Legend      （NEW ACTION LEGEND・Libry）"
+  print -- "  2) Blue-chart  （青チャート・sviewer）"
+  print -- "  3) SAPIX       （input/ のPDF一括）"
+  read -r "TARGET_REPLY?番号を入力 [1]: "
+  case "${TARGET_REPLY:-1}" in
+    1|legend|Legend|l)                     TARGET="legend" ;;
+    2|bluechart|BlueChart|blue|bc|chart|b) TARGET="bluechart" ;;
+    3|sapix|SAPIX|s)                       TARGET="sapix" ;;
+    *) fail "1（Legend）・2（Blue-chart）・3（SAPIX）から選んでください。" ;;
+  esac
+fi
+
+PROJECT_ROOT="$(root_for_target "$TARGET")"
+PIPELINE_REL="$(pipeline_for_target "$TARGET")"
+[[ -d "$PROJECT_ROOT" ]] || fail "プロジェクトが見つかりません: $PROJECT_ROOT"
+[[ -f "$PROJECT_ROOT/$PIPELINE_REL" ]] || fail "抽出スクリプトが見つかりません: $PROJECT_ROOT/$PIPELINE_REL"
+
+# SAPIX は input/ のPDFを自分で走査するので、本・部分・範囲は聞かずそのまま委譲する。
+if [[ "$TARGET" == "sapix" ]]; then
+  print -- "batch_extract — $(label_for_target "$TARGET")"
+  print -- "  実行: uv run python $PIPELINE_REL ${PASSTHRU[*]}"
+  print -- ""
+  cd -- "$PROJECT_ROOT"
+  exec uv run python "$PIPELINE_REL" "${PASSTHRU[@]}"
+fi
+
+# 導通確認だけなら本・部分・範囲は不要。
+if (( CHECK_ONLY == 1 )); then
+  cd -- "$PROJECT_ROOT"
+  exec uv run --project "$WORKSPACE_ROOT" python "$PIPELINE_REL" --check
+fi
+
+AVAILABLE_BOOKS=(${=$(books_for_target "$TARGET")})
+
+if [[ -z "$BOOK_CODE" ]]; then
+  if (( ${#AVAILABLE_BOOKS} == 1 )); then
+    BOOK_CODE="${AVAILABLE_BOOKS[1]}"
+    print -- "本: ${BOOK_CODE}（${BOOK_LABEL[$BOOK_CODE]}）"
+  else
+    print -- "どの本ですか？"
+    local i=1
+    for b in "${AVAILABLE_BOOKS[@]}"; do
+      print -- "  $i) $b ${BOOK_LABEL[$b]}"
+      (( i += 1 ))
+    done
+    read -r "BOOK_REPLY?番号を入力 [1]: "
+    BOOK_REPLY="${BOOK_REPLY:-1}"
+    if [[ "$BOOK_REPLY" =~ '^[0-9]+$' ]]; then
+      (( BOOK_REPLY >= 1 && BOOK_REPLY <= ${#AVAILABLE_BOOKS} )) || fail "1〜${#AVAILABLE_BOOKS} で選んでください。"
+      BOOK_CODE="${AVAILABLE_BOOKS[$BOOK_REPLY]}"
+    else
+      BOOK_CODE="$BOOK_REPLY"
+    fi
+  fi
+fi
+[[ -n "${BOOK_LABEL[$BOOK_CODE]:-}" ]] || fail "未知の本コードです: $BOOK_CODE"
+[[ " ${AVAILABLE_BOOKS[*]} " == *" $BOOK_CODE "* ]] || \
+  fail "$(label_for_target "$TARGET") では $BOOK_CODE を扱っていません（有効: ${AVAILABLE_BOOKS[*]}）。"
+
+if [[ -z "$SECTION_CODE" ]]; then
+  print -- "どの部分ですか？"
+  local i=1
+  for s in "${SECTION_ORDER[@]}"; do
+    print -- "  $i) $s　${SECTION_LABEL[$s]}"
+    (( i += 1 ))
+  done
+  read -r "SECTION_REPLY?番号を入力 [1]: "
+  SECTION_REPLY="${SECTION_REPLY:-1}"
+  if [[ "$SECTION_REPLY" =~ '^[0-9]+$' ]]; then
+    (( SECTION_REPLY >= 1 && SECTION_REPLY <= ${#SECTION_ORDER} )) || fail "1〜${#SECTION_ORDER} で選んでください。"
+    SECTION_CODE="${SECTION_ORDER[$SECTION_REPLY]}"
+  else
+    SECTION_CODE="$SECTION_REPLY"
+  fi
+fi
+[[ -n "${SECTION_LABEL[$SECTION_CODE]:-}" ]] || fail "未知の部分です: $SECTION_CODE"
+
+SCAN_DIR="$PROJECT_ROOT/scans/$BOOK_CODE/$SECTION_CODE"
+if [[ ! -d "$SCAN_DIR" ]]; then
+  fail "紙面PNGのフォルダがありません: $SCAN_DIR
+      先に reader_capture で取り込んでください。"
+fi
+PAGE_COUNT=$(/bin/ls -1 "$SCAN_DIR"/*.png 2>/dev/null | /usr/bin/wc -l | /usr/bin/tr -d ' ')
+(( PAGE_COUNT > 0 )) || fail "PNGが1枚もありません: $SCAN_DIR"
+
+if [[ -z "$PAGE_RANGE" ]]; then
+  # 取り込み済みの範囲を既定として提示する（打ち間違いを減らすため）
+  FIRST=$(/bin/ls -1 "$SCAN_DIR"/*.png | /usr/bin/head -1 | /usr/bin/sed 's/.*_p0*\([0-9]*\)\.png/\1/')
+  LAST=$(/bin/ls -1 "$SCAN_DIR"/*.png | /usr/bin/tail -1 | /usr/bin/sed 's/.*_p0*\([0-9]*\)\.png/\1/')
+  print -- "取り込み済み: ${PAGE_COUNT}ページ（p.${FIRST}〜p.${LAST}）"
+  read -r "RANGE_REPLY?ページ範囲 [${FIRST}-${LAST}]: "
+  PAGE_RANGE="${RANGE_REPLY:-${FIRST}-${LAST}}"
+fi
+[[ "$PAGE_RANGE" =~ '^[0-9]+([-,][0-9]+)*$' ]] || \
+  fail "ページ範囲は 297-380 や 5,7,9-12 の形式で指定してください: $PAGE_RANGE"
+
+print -- ""
+print -- "batch_extract — $(label_for_target "$TARGET")"
+print -- "  本       : $BOOK_CODE（${BOOK_LABEL[$BOOK_CODE]}）"
+print -- "  部分     : $SECTION_CODE（${SECTION_LABEL[$SECTION_CODE]}）"
+print -- "  ページ   : $PAGE_RANGE"
+print -- "  読み込み : $SCAN_DIR"
+print -- "  書き出し : $PROJECT_ROOT/extract/$BOOK_CODE/outputs/pipeline/$SECTION_CODE/"
+print -- ""
+
+cd -- "$PROJECT_ROOT"
+exec uv run --project "$WORKSPACE_ROOT" python "$PIPELINE_REL" \
+  --book "$BOOK_CODE" --section "$SECTION_CODE" --range "$PAGE_RANGE" "${PASSTHRU[@]}"
