@@ -1,0 +1,22 @@
+onboarding = false
+
+[ui]
+show_agent_labels_on_pane_borders = true
+
+[theme]
+name = "terminal"
+auto_switch = false
+
+[keys]
+prefix = "ctrl+a"
+
+# tmux の Ctrl-a → W（claude-sessionizer.sh）の Herdr 版。
+# fzf でプロジェクトを選び、そのフォルダで Herdr ワークスペースを作る。
+# キーは shift+m。shift+w は Herdr 既定の rename_workspace なので譲った。
+[[keys.command]]
+key = "prefix+shift+m"
+type = "popup"
+command = "$HOME/Projects/Herdr/scripts/herdr-sessionizer.sh"
+description = "プロジェクトを選んで Herdr ワークスペースを作る"
+width = "80%"
+height = "80%"

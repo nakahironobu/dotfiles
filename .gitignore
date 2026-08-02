@@ -30,3 +30,7 @@
 
 # tmux plugins (TPM が再生成。XDGパスで repo working tree 内に出来るため除外)
 home/.config/tmux/plugins/
+
+# herdr のランタイム生成物（config.toml だけ管理する）
+home/.config/herdr/*
+!home/.config/herdr/config.toml
