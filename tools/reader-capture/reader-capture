@@ -50,8 +50,9 @@ BLUECHART_ROOT="${BLUECHART_ROOT:-$HOME/Projects/MATH/Blue-chart}"
 
 # 本コード → 表示名
 typeset -A BOOK_LABEL
-BOOK_LABEL=(1a "数学I+A" 2b "数学II+B" 3c "数学III+C")
-BOOK_ORDER=(1a 2b 3c)
+# 数学C は単独の1冊。`3c`＝数学III+C は誤りだった（2026-08-08 に `c` へ改名）。
+BOOK_LABEL=(1a "数学I+A" 2b "数学II+B" c "数学C" 3 "数学III")
+BOOK_ORDER=(1a 2b c)
 
 # 部分コード → 保存先ディレクトリ名 / ファイル名prefix / 表示名。
 # ⚠ prefix はディレクトリ名と違う（problems/ に problem_p0001.png）。
@@ -100,7 +101,7 @@ usage() {
 
 保存先の決まり（Legend / BlueChart）:
   <プロジェクト>/scans/<本>/<部分>/<prefix>_pNNNN.png
-    本   : 1a=数学I+A / 2b=数学II+B / 3c=数学III+C
+    本   : 1a=数学I+A / 2b=数学II+B / c=数学C
     部分 : honpen（本編）→ honpen_p0332.png
            problems（別冊問題編）→ problem_p0001.png   ※prefixは単数形
            answers（解答編）→ answer_p0001.png
@@ -110,7 +111,7 @@ usage() {
 オプション:
   -o, --output DIR       保存先フォルダ（指定すると本・部分は聞きません）
   -p, --prefix NAME      ファイル名の先頭文字
-  -b, --book CODE        1a / 2b / 3c
+  -b, --book CODE        1a / 2b / c（数学C）
   -s, --section NAME     honpen / problems / answers / intro
   -d, --delay SEC        ページ送り後の待機秒数（Kindle既定1.3 / Legend既定1.2 / BlueChart既定0.8）
       --direction DIR    right または left（BlueChartでは使いません）
@@ -182,7 +183,7 @@ while (( $# > 0 )); do
       (( $# >= 2 )) || fail "$1には文字列を指定してください。"
       FILE_PREFIX="$2"; shift 2 ;;
     -b|--book)
-      (( $# >= 2 )) || fail "$1には 1a / 2b / 3c を指定してください。"
+      (( $# >= 2 )) || fail "$1には 1a / 2b / c を指定してください。"
       BOOK_CODE="$2"; shift 2 ;;
     -s|--section)
       (( $# >= 2 )) || fail "$1には honpen / problems / answers / intro を指定してください。"
@@ -271,7 +272,7 @@ if [[ -n "$PROJECT_ROOT" ]] && [[ -z "$OUTPUT_DIR" ]] && (( CHECK_ONLY == 0 )); 
       case "$BOOK_REPLY" in
         1|1a) BOOK_CODE="1a" ;;
         2|2b) BOOK_CODE="2b" ;;
-        3|3c) BOOK_CODE="3c" ;;
+        3|c|3c) BOOK_CODE="c" ;;   # 3c は旧コード。打ってしまっても c に寄せる
         0)    BOOK_CODE="-"  ;;   # 自動決定をやめて従来の質問へ
         *)    print -- "  0〜3 から選んでください。" ;;
       esac

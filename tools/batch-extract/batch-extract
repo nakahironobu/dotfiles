@@ -47,7 +47,7 @@ usage() {
 書き出し: <プロジェクト>/extract/<本>/outputs/pipeline/<部分>/page_NNNN/
 
 オプション:
-  -b, --book CODE      1a / 2b / 3c
+  -b, --book CODE      1a / 2b / c（数学C）
   -s, --section NAME   honpen / problems / answers / intro
   -r, --range SPEC     ページ範囲。例: 297-380 や 5,7,9-12
       --check          ツール導通確認だけ行い、抽出しない
@@ -65,7 +65,10 @@ EOF
 # ---- 教材の定義 -----------------------------------------------------------
 # 本コード → 表示名。Blue-chart はいま数学I+A だけ取り込んでいる。
 typeset -A BOOK_LABEL
-BOOK_LABEL=(1a "数学I+A" 2b "数学II+B" 3c "数学III+C")
+# NEW ACTION LEGEND は 数学I+A / 数学II+B / **数学C** / 数学III の構成。
+# 数学C は単独の1冊（ベクトル・平面上の曲線・複素数平面）で、`3c`＝数学III+C は誤り
+# だった（2026-08-08 に `c` へ改名）。数学III を足すときは `3` を使う。
+BOOK_LABEL=(1a "数学I+A" 2b "数学II+B" c "数学C" 3 "数学III")
 
 # 部分コード → 表示名。reader_capture の SECTION_LABEL と揃えてある。
 typeset -A SECTION_LABEL
@@ -79,7 +82,7 @@ SECTION_ORDER=(honpen problems answers intro)
 
 books_for_target() {
   case "$1" in
-    legend)    print -- "1a 2b 3c" ;;
+    legend)    print -- "1a 2b c" ;;
     bluechart) print -- "1a" ;;
     *)         print -- "" ;;
   esac
@@ -137,7 +140,7 @@ fi
 while (( $# > 0 )); do
   case "$1" in
     -b|--book)
-      (( $# >= 2 )) || fail "$1には 1a / 2b / 3c を指定してください。"
+      (( $# >= 2 )) || fail "$1には 1a / 2b / c を指定してください。"
       BOOK_CODE="$2"; shift 2 ;;
     -s|--section)
       (( $# >= 2 )) || fail "$1には honpen / problems / answers / intro を指定してください。"
@@ -242,7 +245,7 @@ fi
 # ⚠ ここで `ls | head` を使わないこと。head が1行読んで終了すると ls が SIGPIPE で死に、
 #   `set -o pipefail` + `set -e` によって**何も出さずにスクリプトごと終了**する。
 #   しかも ls が書き終わるのが先か head が抜けるのが先かの競合なので、同じ本でも当たり外れが出る
-#   （実測: 1a/honpen 660枚→141・3c/honpen 322枚→0）。README の例が常に --range 付きだったため
+#   （実測: 1a/honpen 660枚→141・c/honpen 322枚→0）。README の例が常に --range 付きだったため
 #   長らく表面化していなかった。zsh のグロブで配列に取れば、パイプ自体が要らない。
 SCAN_PNGS=("$SCAN_DIR"/*.png(N))
 PAGE_COUNT=${#SCAN_PNGS}
