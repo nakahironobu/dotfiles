@@ -239,13 +239,27 @@ if [[ ! -d "$SCAN_DIR" ]]; then
   fail "紙面PNGのフォルダがありません: $SCAN_DIR
       先に reader_capture で取り込んでください。"
 fi
-PAGE_COUNT=$(/bin/ls -1 "$SCAN_DIR"/*.png 2>/dev/null | /usr/bin/wc -l | /usr/bin/tr -d ' ')
+# ⚠ ここで `ls | head` を使わないこと。head が1行読んで終了すると ls が SIGPIPE で死に、
+#   `set -o pipefail` + `set -e` によって**何も出さずにスクリプトごと終了**する。
+#   しかも ls が書き終わるのが先か head が抜けるのが先かの競合なので、同じ本でも当たり外れが出る
+#   （実測: 1a/honpen 660枚→141・3c/honpen 322枚→0）。README の例が常に --range 付きだったため
+#   長らく表面化していなかった。zsh のグロブで配列に取れば、パイプ自体が要らない。
+SCAN_PNGS=("$SCAN_DIR"/*.png(N))
+PAGE_COUNT=${#SCAN_PNGS}
 (( PAGE_COUNT > 0 )) || fail "PNGが1枚もありません: $SCAN_DIR"
+
+page_no_of() {
+  # honpen_p0014.png → 14（先頭の0は8進数と解釈されないよう 10# を付ける）
+  local f=${1:t}
+  f=${f##*_p}
+  f=${f%.png}
+  print -- $(( 10#${f:-0} ))
+}
 
 if [[ -z "$PAGE_RANGE" ]]; then
   # 取り込み済みの範囲を既定として提示する（打ち間違いを減らすため）
-  FIRST=$(/bin/ls -1 "$SCAN_DIR"/*.png | /usr/bin/head -1 | /usr/bin/sed 's/.*_p0*\([0-9]*\)\.png/\1/')
-  LAST=$(/bin/ls -1 "$SCAN_DIR"/*.png | /usr/bin/tail -1 | /usr/bin/sed 's/.*_p0*\([0-9]*\)\.png/\1/')
+  FIRST=$(page_no_of "${SCAN_PNGS[1]}")
+  LAST=$(page_no_of "${SCAN_PNGS[-1]}")
   print -- "取り込み済み: ${PAGE_COUNT}ページ（p.${FIRST}〜p.${LAST}）"
   read -r "RANGE_REPLY?ページ範囲 [${FIRST}-${LAST}]: "
   PAGE_RANGE="${RANGE_REPLY:-${FIRST}-${LAST}}"
