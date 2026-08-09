@@ -32,7 +32,22 @@ dependencies = [
     "ordered-set>=4.1",
     "dill>=0.3.8",
     "pyparsing>=3.1",
+    # --- 数値処理 ---
+    # 図の切り出し・傾き補正が使う（Legend/scripts/trim_figures.py・detect_map_edges.py、
+    # MATH/*/scripts/deskew_pages.py）。
+    "scipy>=1.14",
+    # --- 検品用のブラウザUI ---
+    # SAPIX/extract/app.py・PDF/app.py が使う。
+    "gradio>=5",
+    # --- 読み上げ（TTS）---
+    # Microsoft のニューラル音声（Azure と同じ声・APIキー不要）。ENGLISH の演習アプリが使う。
+    "edge-tts>=7",
 ]
+
+# ⚠ ここに書いていないものを `uv pip install` で後入れしても、次の `uv sync` で消える。
+#    実際 2026-08-10 に scipy と gradio 一式が巻き添えで消えた（別プロジェクトが後入れ
+#    していたもの）。**共有 venv に足すものは必ずこの dependencies に宣言する。**
+#    1プロジェクトでしか使わないなら `uv run --with <pkg> …` にして共有環境に触らない。
 
 [tool.uv]
 package = false
@@ -44,6 +59,7 @@ members = [
     "MATH/SUNDAI-JITSURYOKU",
     "PDF-tools",
     "EFSA",
+    "KONO",
 ]
 # 対象外: BenAI / rika / WORK_AI_RULE（Python 無し）
 # OCR ツール ~/tools/ndlocr-lite は workspace 外。共有 venv の python で src/ を直接実行する方針
