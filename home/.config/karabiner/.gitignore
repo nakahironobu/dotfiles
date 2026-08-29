@@ -1,0 +1,3 @@
+# Karabiner が自動生成するもの（マシン固有・共有しない）
+automatic_backups/
+karabiner.json.bak-*
