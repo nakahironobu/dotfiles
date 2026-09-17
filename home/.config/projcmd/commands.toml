@@ -112,3 +112,17 @@ desc = "サーバ上のサービスの状態をまとめて見る（coreplus / e
 cmd = "ssh ubuntu 'systemctl --no-pager --lines=0 status coreplus english legend | head -40'"
 dir = "~/Projects"
 tags = ["ubuntu", "deploy", "check"]
+
+[[command]]
+project = "record_videos"
+desc = "取得と圧縮を M4 にやらせ、M1 が検査して NAS に置く（台帳は M1 の 1 つだけ）"
+cmd = """uv run python JUKEN7/scripts/fetch_via_m4.py --run"""
+dir = "~/Projects/record_videos"
+tags = ["m4", "sync"]
+
+[[command]]
+project = "record_videos"
+desc = "M4 に何を取らせるかを表示する（取らない）"
+cmd = """uv run python JUKEN7/scripts/fetch_via_m4.py"""
+dir = "~/Projects/record_videos"
+tags = ["m4", "check"]
